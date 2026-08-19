@@ -1,172 +1,403 @@
 <!doctype html>
 <html lang="vi">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>CRM Khách Hàng</title>
-    <link rel="stylesheet" href="styles.css">
-  </head>
-  <body>
-    <div class="app-shell">
-      <aside class="sidebar">
-        <div class="brand">
-          <span class="brand-mark">CRM</span>
-          <div>
-            <strong>Quản lý khách hàng</strong>
-            <span>Đồng bộ với file Excel</span>
-          </div>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CRM Khách Hàng</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+  <div class="app-shell">
+
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark">CRM</span>
+        <div>
+          <strong>Quản lý khách hàng</strong>
+          <span>Đồng bộ với file Excel</span>
+        </div>
+      </div>
+
+      <nav class="nav-list" aria-label="Điều hướng">
+        <a class="active" href="#dashboard">Tổng quan</a>
+        <a href="#customers">Danh sách</a>
+        <a href="#pipeline">Loại khách</a>
+        <a href="#import">Đồng bộ</a>
+      </nav>
+
+      <img
+        class="sidebar-visual"
+        src="assets/crm-visual.svg"
+        alt=""
+        aria-hidden="true"
+      >
+
+      <div class="sheet-box" id="import">
+        <label for="excelFile">File Excel khách hàng</label>
+
+        <input
+          id="excelFile"
+          class="file-input"
+          type="file"
+          accept=".xlsx,.xls,.csv"
+        >
+
+        <button
+          class="primary"
+          id="syncExcelBtn"
+          type="button"
+        >
+          Đồng bộ từ Excel
+        </button>
+
+        <p id="importStatus" class="muted">
+          Chọn file .xlsx, .xls hoặc .csv.
+          Sau khi thêm/sửa dữ liệu, bấm “Tải Excel đã cập nhật”
+          để xuất file mới.
+        </p>
+      </div>
+    </aside>
+
+    <main class="main">
+
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Hệ thống CRM</p>
+
+          <h1>
+            Quản lý dữ liệu khách hàng và xuất ngược về Excel
+          </h1>
         </div>
 
-        <nav class="nav-list" aria-label="Điều hướng">
-          <a class="active" href="#dashboard">Tổng quan</a>
-          <a href="#customers">Danh sách</a>
-          <a href="#pipeline">Loại khách</a>
-          <a href="#import">Đồng bộ</a>
-        </nav>
+        <div class="actions">
+          <button
+            class="ghost"
+            id="exportBtn"
+            type="button"
+          >
+            Xuất CSV
+          </button>
 
-        <img class="sidebar-visual" src="assets/crm-visual.svg" alt="" aria-hidden="true">
+          <button
+            class="ghost"
+            id="exportExcelBtn"
+            type="button"
+          >
+            Tải Excel đã cập nhật
+          </button>
 
-        <div class="sheet-box" id="import">
-          <label for="excelFile">File Excel khách hàng</label>
-          <input id="excelFile" class="file-input" type="file" accept=".xlsx,.xls,.csv">
-          <button class="primary" id="syncExcelBtn" type="button">Đồng bộ từ Excel</button>
-          <p id="importStatus" class="muted">Chọn file .xlsx, .xls hoặc .csv. Sau khi thêm/sửa dữ liệu, bấm “Tải Excel đã cập nhật” để xuất file mới.</p>
+          <button
+            class="primary"
+            id="addCustomerBtn"
+            type="button"
+          >
+            Thêm dữ liệu
+          </button>
         </div>
-      </aside>
+      </header>
 
-      <main class="main">
-        <header class="topbar">
-          <div>
-            <p class="eyebrow">Hệ thống CRM</p>
-            <h1>Quản lý dữ liệu khách hàng và xuất ngược về Excel</h1>
-          </div>
-          <div class="actions">
-            <button class="ghost" id="exportBtn" type="button">Xuất CSV</button>
-            <button class="ghost" id="exportExcelBtn" type="button">Tải Excel đã cập nhật</button>
-            <button class="primary" id="addCustomerBtn" type="button">Thêm dữ liệu</button>
-          </div>
-        </header>
+      <!-- THỐNG KÊ -->
+      <section
+        class="metrics"
+        id="dashboard"
+        aria-label="Chỉ số tổng quan"
+      >
+        <article>
+          <span>Tổng khách</span>
+          <strong id="totalCustomers">0</strong>
+        </article>
 
-        <section class="metrics" id="dashboard" aria-label="Chỉ số tổng quan">
-          <article>
-            <span>Tổng khách</span>
-            <strong id="totalCustomers">0</strong>
-          </article>
-          <article>
-            <span>Khách mới</span>
-            <strong id="newCustomers">0</strong>
-          </article>
-          <article>
-            <span>Tổng doanh số</span>
-            <strong id="expectedRevenue">0đ</strong>
-          </article>
-          <article>
-            <span>Hạn chốt cần chú ý</span>
-            <strong id="needFollowUp">0</strong>
-          </article>
-        </section>
+        <article>
+          <span>Khách mới</span>
+          <strong id="newCustomers">0</strong>
+        </article>
 
-        <section class="workspace" id="customers">
-          <div class="toolbar">
-            <div class="search-field">
-              <span aria-hidden="true">Tìm</span>
-              <input id="searchInput" type="search" placeholder="Tên khách, loại khách, ký hiệu, giải thích...">
-            </div>
-            <select id="typeFilter" aria-label="Lọc loại khách">
-              <option value="">Tất cả loại khách</option>
-            </select>
-            <select id="symbolFilter" aria-label="Lọc ký hiệu">
-              <option value="">Tất cả ký hiệu</option>
-            </select>
-            <button class="ghost" id="clearFilterBtn" type="button">Xóa lọc</button>
-          </div>
+        <article>
+          <span>Tổng doanh số</span>
+          <strong id="expectedRevenue">0đ</strong>
+        </article>
 
-          <div class="list-summary">
-            <strong id="resultCount">0 khách hàng</strong>
-            <span id="fileInfo">Chưa đồng bộ file Excel.</span>
+        <article>
+          <span>Hạn chốt cần chú ý</span>
+          <strong id="needFollowUp">0</strong>
+        </article>
+      </section>
+
+      <!-- DANH SÁCH -->
+      <section
+        class="workspace"
+        id="customers"
+      >
+
+        <div class="toolbar">
+
+          <!-- TÌM KIẾM -->
+          <div class="search-field">
+            <span aria-hidden="true">Tìm</span>
+
+            <input
+              id="searchInput"
+              type="search"
+              placeholder="Tên khách, loại khách, ký hiệu, giải thích..."
+            >
           </div>
 
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>STT</th>
-                  <th>Khách hàng</th>
-                  <th>Ngày chốt</th>
-                  <th>Tiến trình</th>
-                  <th>Hạn chốt</th>
-                  <th>Doanh số</th>
-                  <th>Loại khách</th>
-                  <th>Ký hiệu</th>
-                  <th>Giải thích</th>
-                  <th>Thao tác</th>
-                </tr>
-              </thead>
-              <tbody id="customerRows"></tbody>
-            </table>
-            <div class="empty-state" id="emptyState">
-              <strong>Chưa có dữ liệu khách hàng</strong>
-              <span>Hãy chọn file Excel để đồng bộ hoặc bấm “Thêm dữ liệu”.</span>
-            </div>
-          </div>
-        </section>
+          <!-- LỌC LOẠI KHÁCH -->
+          <select
+            id="typeFilter"
+            aria-label="Lọc loại khách"
+          >
+            <option value="">
+              Tất cả loại khách
+            </option>
+          </select>
 
-        <section class="pipeline" id="pipeline" aria-label="Thống kê loại khách">
-          <div class="section-head">
-            <h2>Phân bổ loại khách</h2>
-            <span id="lastUpdated">Chưa cập nhật</span>
-          </div>
-          <div class="pipeline-grid" id="pipelineGrid"></div>
-        </section>
-      </main>
-    </div>
+          <!-- LỌC KÝ HIỆU -->
+          <select
+            id="symbolFilter"
+            aria-label="Lọc ký hiệu"
+          >
+            <option value="">
+              Tất cả ký hiệu
+            </option>
+          </select>
 
-    <dialog id="customerDialog">
-      <form id="customerForm">
-        <div class="dialog-head">
-          <h2 id="dialogTitle">Thêm dữ liệu</h2>
-          <button class="icon-btn" id="closeDialogBtn" type="button" aria-label="Đóng">×</button>
-        </div>
+          <!-- LỌC HẠN CHỐT -->
+          <select
+            id="deadlineFilter"
+            aria-label="Lọc hạn chốt"
+          >
+            <option value="">
+              Tất cả hạn chốt
+            </option>
 
-        <input id="customerId" type="hidden">
-        <div class="form-grid">
-          <label>STT
-            <input id="sttInput" type="number" min="1">
-          </label>
-          <label>Khách Hàng
-            <input id="nameInput" required>
-          </label>
-          <label>Ngày Chốt
-            <input id="closeDateInput" placeholder="31/5">
-          </label>
-          <label>Tiến Trình
-            <input id="progressInput" placeholder="14/14">
-          </label>
-          <label>Hạn Chốt
-            <input id="deadlineInput" placeholder="0 hoặc 6/7">
-          </label>
-          <label>Doanh Số
-            <input id="valueInput" inputmode="numeric" placeholder="200.000">
-          </label>
-          <label>Loại Khách
-            <input id="customerTypeInput" placeholder="Mới, Cũ, Cũ (Vip)">
-          </label>
-          <label>Ký Hiệu
-            <input id="symbolInput" placeholder="lite, mess, zalo">
-          </label>
-          <label class="full">Giải Thích
-            <textarea id="explanationInput" rows="3"></textarea>
-          </label>
+            <option value="none">
+              Không có hạn chốt
+            </option>
+
+            <option value="has">
+              Có hạn chốt
+            </option>
+
+            <option value="urgent">
+              Sắp đến hạn
+            </option>
+
+            <option value="overdue">
+              Quá hạn
+            </option>
+          </select>
+
+          <!-- XÓA LỌC -->
+          <button
+            class="ghost"
+            id="clearFilterBtn"
+            type="button"
+          >
+            Xóa lọc
+          </button>
+
         </div>
 
-        <div class="dialog-actions">
-          <button class="ghost" id="cancelDialogBtn" type="button">Hủy</button>
-          <button class="primary" type="submit">Lưu dữ liệu</button>
-        </div>
-      </form>
-    </dialog>
+        <div class="list-summary">
+          <strong id="resultCount">
+            0 khách hàng
+          </strong>
 
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="app.js"></script>
-  </body>
+          <span id="fileInfo">
+            Chưa đồng bộ file Excel.
+          </span>
+        </div>
+
+        <div class="table-wrap">
+
+          <table>
+            <thead>
+              <tr>
+                <th>STT</th>
+                <th>Khách hàng</th>
+                <th>Ngày chốt</th>
+                <th>Tiến trình</th>
+                <th>Hạn chốt</th>
+                <th>Doanh số</th>
+                <th>Loại khách</th>
+                <th>Ký hiệu</th>
+                <th>Giải thích</th>
+                <th>Thao tác</th>
+              </tr>
+            </thead>
+
+            <tbody id="customerRows"></tbody>
+          </table>
+
+          <div
+            class="empty-state"
+            id="emptyState"
+          >
+            <strong>
+              Chưa có dữ liệu khách hàng
+            </strong>
+
+            <span>
+              Hãy chọn file Excel để đồng bộ
+              hoặc bấm “Thêm dữ liệu”.
+            </span>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- PHÂN BỔ LOẠI KHÁCH -->
+      <section
+        class="pipeline"
+        id="pipeline"
+        aria-label="Thống kê loại khách"
+      >
+        <div class="section-head">
+          <h2>Phân bổ loại khách</h2>
+          <span id="lastUpdated">
+            Chưa cập nhật
+          </span>
+        </div>
+
+        <div
+          class="pipeline-grid"
+          id="pipelineGrid"
+        ></div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- FORM -->
+  <dialog id="customerDialog">
+
+    <form id="customerForm">
+
+      <div class="dialog-head">
+        <h2 id="dialogTitle">
+          Thêm dữ liệu
+        </h2>
+
+        <button
+          class="icon-btn"
+          id="closeDialogBtn"
+          type="button"
+          aria-label="Đóng"
+        >
+          ×
+        </button>
+      </div>
+
+      <input
+        id="customerId"
+        type="hidden"
+      >
+
+      <div class="form-grid">
+
+        <label>
+          STT
+          <input
+            id="sttInput"
+            type="number"
+            min="1"
+          >
+        </label>
+
+        <label>
+          Khách Hàng
+          <input
+            id="nameInput"
+            required
+          >
+        </label>
+
+        <label>
+          Ngày Chốt
+          <input
+            id="closeDateInput"
+            placeholder="31/5"
+          >
+        </label>
+
+        <label>
+          Tiến Trình
+          <input
+            id="progressInput"
+            placeholder="14/14"
+          >
+        </label>
+
+        <label>
+          Hạn Chốt
+          <input
+            id="deadlineInput"
+            placeholder="0 hoặc 6/7"
+          >
+        </label>
+
+        <label>
+          Doanh Số
+          <input
+            id="valueInput"
+            inputmode="numeric"
+            placeholder="200.000"
+          >
+        </label>
+
+        <label>
+          Loại Khách
+          <input
+            id="customerTypeInput"
+            placeholder="Mới, Cũ, Cũ (Vip)"
+          >
+        </label>
+
+        <label>
+          Ký Hiệu
+          <input
+            id="symbolInput"
+            placeholder="lite, mess, zalo"
+          >
+        </label>
+
+        <label class="full">
+          Giải Thích
+          <textarea
+            id="explanationInput"
+            rows="3"
+          ></textarea>
+        </label>
+
+      </div>
+
+      <div class="dialog-actions">
+
+        <button
+          class="ghost"
+          id="cancelDialogBtn"
+          type="button"
+        >
+          Hủy
+        </button>
+
+        <button
+          class="primary"
+          type="submit"
+        >
+          Lưu dữ liệu
+        </button>
+
+      </div>
+
+    </form>
+
+  </dialog>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="app.js"></script>
+
+</body>
 </html>
