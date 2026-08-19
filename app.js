@@ -1,5 +1,5 @@
-const STORAGE_KEY = "crm_excel_sync_v1";
-const REQUIRED_COLUMNS = ["STT", "Khách Hàng", "Ngày Chốt", "Tiến Trình", "Hạn Chốt", "Doanh Số", "Loại Khách", "Ký Hiệu", "Giải Thích"];
+const STORAGE_KEY = "crm_excel_sync_v2";
+const COLUMNS = ["STT", "Khách Hàng", "Ngày Chốt", "Tiến Trình", "Hạn Chốt", "Doanh Số", "Loại Khách", "Ký Hiệu", "Giải Thích"];
 
 const state = {
   customers: [],
@@ -7,7 +7,8 @@ const state = {
   type: "",
   symbol: "",
   fileName: "",
-  syncedAt: ""
+  syncedAt: "",
+  dirty: false
 };
 
 let searchTimer = null;
@@ -16,6 +17,13 @@ const el = {
   excelFile: document.querySelector("#excelFile"),
   syncBtn: document.querySelector("#syncExcelBtn"),
   exportBtn: document.querySelector("#exportBtn"),
+  exportExcelBtn: document.querySelector("#exportExcelBtn"),
+  addCustomerBtn: document.querySelector("#addCustomerBtn"),
+  dialog: document.querySelector("#customerDialog"),
+  form: document.querySelector("#customerForm"),
+  dialogTitle: document.querySelector("#dialogTitle"),
+  closeDialogBtn: document.querySelector("#closeDialogBtn"),
+  cancelDialogBtn: document.querySelector("#cancelDialogBtn"),
   rows: document.querySelector("#customerRows"),
   empty: document.querySelector("#emptyState"),
   total: document.querySelector("#totalCustomers"),
@@ -33,7 +41,7 @@ const el = {
   importStatus: document.querySelector("#importStatus")
 };
 
-restoreLastSync();
+restoreData();
 bindEvents();
 render();
 
@@ -41,7 +49,13 @@ function bindEvents() {
   el.syncBtn.addEventListener("click", syncFromExcelFile);
   el.excelFile.addEventListener("change", syncFromExcelFile);
   el.exportBtn.addEventListener("click", exportCsv);
+  el.exportExcelBtn.addEventListener("click", exportExcel);
+  el.addCustomerBtn.addEventListener("click", () => openCustomerForm());
+  el.closeDialogBtn.addEventListener("click", closeDialog);
+  el.cancelDialogBtn.addEventListener("click", closeDialog);
+  el.form.addEventListener("submit", saveCustomer);
   el.clearFilter.addEventListener("click", clearFilters);
+  el.rows.addEventListener("click", handleRowAction);
 
   el.search.addEventListener("input", event => {
     clearTimeout(searchTimer);
@@ -62,23 +76,25 @@ function bindEvents() {
   });
 }
 
-function restoreLastSync() {
+function restoreData() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
     if (!saved) return;
     state.customers = Array.isArray(saved.customers) ? saved.customers : [];
     state.fileName = saved.fileName || "";
     state.syncedAt = saved.syncedAt || "";
+    state.dirty = Boolean(saved.dirty);
   } catch {
     state.customers = [];
   }
 }
 
-function persistSync() {
+function persistData() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
     customers: state.customers,
     fileName: state.fileName,
-    syncedAt: state.syncedAt
+    syncedAt: state.syncedAt,
+    dirty: state.dirty
   }));
 }
 
@@ -102,7 +118,8 @@ async function syncFromExcelFile() {
     state.customers = customers;
     state.fileName = file.name;
     state.syncedAt = new Date().toISOString();
-    persistSync();
+    state.dirty = false;
+    persistData();
     clearFilters(false);
     setImportStatus(`Đã đồng bộ ${customers.length} khách hàng từ file Excel.`);
   } catch (error) {
@@ -189,7 +206,7 @@ function parseCsvRows(text) {
 function rowsToCustomers(rows) {
   const headerIndex = findHeaderIndex(rows);
   if (headerIndex < 0) {
-    throw new Error(`File cần có hàng tiêu đề gồm: ${REQUIRED_COLUMNS.join(", ")}.`);
+    throw new Error(`File cần có hàng tiêu đề gồm: ${COLUMNS.join(", ")}.`);
   }
 
   const headers = rows[headerIndex].map(normalizeKey);
@@ -218,17 +235,15 @@ function normalizeCustomer(record, index) {
     return key ? record[key] : "";
   };
 
-  const customerType = find(["loai_khach", "type", "customer_type", "cot_6"]) || "Mới";
-
   return {
-    id: `${find(["stt", "cot_0"]) || index + 1}-${normalizeKey(find(["khach_hang", "ten_khach_hang", "cot_1"]))}`,
+    id: crypto.randomUUID(),
     stt: find(["stt", "so_thu_tu", "thu_tu", "cot_0"]) || String(index + 1),
     name: find(["khach_hang", "ten_khach_hang", "ho_ten", "ten", "cot_1"]),
     closeDate: find(["ngay_chot", "chot_ngay", "close_date", "cot_2"]),
     progress: find(["tien_trinh", "progress", "cot_3"]),
     deadline: find(["han_chot", "deadline", "cot_4"]),
     value: parseMoney(find(["doanh_so", "doanh_thu", "gia_tri", "amount", "cot_5"])),
-    customerType,
+    customerType: find(["loai_khach", "type", "customer_type", "cot_6"]) || "Mới",
     symbol: find(["ky_hieu", "symbol", "tag", "cot_7"]),
     explanation: find(["giai_thich", "explanation", "description", "cot_8"])
   };
@@ -245,18 +260,7 @@ function render() {
 
 function getFilteredCustomers() {
   return state.customers.filter(customer => {
-    const haystack = normalizeSearch([
-      customer.stt,
-      customer.name,
-      customer.closeDate,
-      customer.progress,
-      customer.deadline,
-      customer.value,
-      customer.customerType,
-      customer.symbol,
-      customer.explanation
-    ].join(" "));
-
+    const haystack = normalizeSearch(customerToRow(customer).join(" "));
     const matchesQuery = !state.query || haystack.includes(state.query);
     const matchesType = !state.type || customer.customerType === state.type;
     const matchesSymbol = !state.symbol || customer.symbol === state.symbol;
@@ -277,6 +281,12 @@ function renderRows(customers) {
       <td>${renderCustomerType(customer.customerType)}</td>
       <td>${escapeHtml(customer.symbol || "-")}</td>
       <td>${escapeHtml(customer.explanation || "-")}</td>
+      <td>
+        <div class="row-actions">
+          <button type="button" data-action="edit" data-id="${customer.id}">Sửa</button>
+          <button type="button" data-action="delete" data-id="${customer.id}">Xóa</button>
+        </div>
+      </td>
     </tr>
   `).join("");
   el.empty.style.display = customers.length ? "none" : "block";
@@ -321,14 +331,85 @@ function renderPipeline() {
 
 function renderSyncInfo() {
   if (!state.syncedAt) {
-    el.fileInfo.textContent = "Chưa đồng bộ file Excel.";
+    el.fileInfo.textContent = state.dirty ? "Đã có dữ liệu mới, hãy tải Excel đã cập nhật." : "Chưa đồng bộ file Excel.";
     el.lastUpdated.textContent = "Chưa cập nhật";
     return;
   }
 
   const syncedAt = new Date(state.syncedAt).toLocaleString("vi-VN");
-  el.fileInfo.textContent = `Nguồn dữ liệu: ${state.fileName}`;
+  const dirtyText = state.dirty ? " - Có thay đổi chưa xuất Excel" : "";
+  el.fileInfo.textContent = `Nguồn dữ liệu: ${state.fileName || "Excel"}${dirtyText}`;
   el.lastUpdated.textContent = `Đồng bộ lúc ${syncedAt}`;
+}
+
+function handleRowAction(event) {
+  const button = event.target.closest("button[data-action]");
+  if (!button) return;
+  if (button.dataset.action === "edit") openCustomerForm(button.dataset.id);
+  if (button.dataset.action === "delete") deleteCustomer(button.dataset.id);
+}
+
+function openCustomerForm(id = "") {
+  const customer = state.customers.find(item => item.id === id);
+  el.dialogTitle.textContent = customer ? "Sửa dữ liệu" : "Thêm dữ liệu";
+  setFormValue("#customerId", customer?.id || "");
+  setFormValue("#sttInput", customer?.stt || nextStt());
+  setFormValue("#nameInput", customer?.name || "");
+  setFormValue("#closeDateInput", customer?.closeDate || "");
+  setFormValue("#progressInput", customer?.progress || "");
+  setFormValue("#deadlineInput", customer?.deadline || "");
+  setFormValue("#valueInput", customer?.value ? formatPlainMoney(customer.value) : "");
+  setFormValue("#customerTypeInput", customer?.customerType || "Mới");
+  setFormValue("#symbolInput", customer?.symbol || "");
+  setFormValue("#explanationInput", customer?.explanation || "");
+  el.dialog.showModal();
+}
+
+function closeDialog() {
+  el.dialog.close();
+  el.form.reset();
+}
+
+function saveCustomer(event) {
+  event.preventDefault();
+  const id = document.querySelector("#customerId").value || crypto.randomUUID();
+  const customer = {
+    id,
+    stt: document.querySelector("#sttInput").value.trim() || nextStt(),
+    name: document.querySelector("#nameInput").value.trim(),
+    closeDate: document.querySelector("#closeDateInput").value.trim(),
+    progress: document.querySelector("#progressInput").value.trim(),
+    deadline: document.querySelector("#deadlineInput").value.trim(),
+    value: parseMoney(document.querySelector("#valueInput").value),
+    customerType: document.querySelector("#customerTypeInput").value.trim() || "Mới",
+    symbol: document.querySelector("#symbolInput").value.trim(),
+    explanation: document.querySelector("#explanationInput").value.trim()
+  };
+
+  const index = state.customers.findIndex(item => item.id === id);
+  if (index >= 0) {
+    state.customers[index] = customer;
+  } else {
+    state.customers.push(customer);
+  }
+
+  markChanged("Đã lưu dữ liệu. Bấm “Tải Excel đã cập nhật” để đồng bộ ra file Excel.");
+  closeDialog();
+}
+
+function deleteCustomer(id) {
+  const customer = state.customers.find(item => item.id === id);
+  if (!customer || !confirm(`Xóa khách hàng "${customer.name}"?`)) return;
+  state.customers = state.customers.filter(item => item.id !== id);
+  markChanged("Đã xóa dữ liệu. Bấm “Tải Excel đã cập nhật” để đồng bộ ra file Excel.");
+}
+
+function markChanged(message) {
+  state.dirty = true;
+  state.syncedAt = state.syncedAt || new Date().toISOString();
+  persistData();
+  render();
+  setImportStatus(message);
 }
 
 function clearFilters(shouldRender = true) {
@@ -347,24 +428,61 @@ function exportCsv() {
     return;
   }
 
-  const rows = state.customers.map(customer => [
+  const csv = [COLUMNS, ...state.customers.map(customerToRow)]
+    .map(row => row.map(csvCell).join(","))
+    .join("\n");
+  const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
+  downloadBlob(blob, `khach-hang-${todayStamp()}.csv`);
+}
+
+function exportExcel() {
+  if (!state.customers.length) {
+    setImportStatus("Chưa có dữ liệu để xuất Excel.", true);
+    return;
+  }
+
+  if (!window.XLSX) {
+    setImportStatus("Chưa tải được thư viện xuất Excel. Hãy kiểm tra kết nối mạng rồi mở lại trang.", true);
+    return;
+  }
+
+  const worksheet = XLSX.utils.aoa_to_sheet([COLUMNS, ...state.customers.map(customerToRow)]);
+  worksheet["!cols"] = [
+    { wch: 8 },
+    { wch: 24 },
+    { wch: 12 },
+    { wch: 12 },
+    { wch: 12 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 12 },
+    { wch: 34 }
+  ];
+
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "KhachHang");
+  XLSX.writeFile(workbook, `khach-hang-da-cap-nhat-${todayStamp()}.xlsx`);
+
+  state.dirty = false;
+  state.fileName = `khach-hang-da-cap-nhat-${todayStamp()}.xlsx`;
+  state.syncedAt = new Date().toISOString();
+  persistData();
+  render();
+  setImportStatus("Đã tải file Excel đã cập nhật.");
+}
+
+function customerToRow(customer) {
+  return [
     customer.stt,
     customer.name,
     customer.closeDate,
     customer.progress,
     customer.deadline,
-    customer.value,
+    Number(customer.value || 0),
     customer.customerType,
     customer.symbol,
     customer.explanation
-  ]);
-  const csv = [REQUIRED_COLUMNS, ...rows].map(row => row.map(csvCell).join(",")).join("\n");
-  const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = `khach-hang-${new Date().toISOString().slice(0, 10)}.csv`;
-  link.click();
-  URL.revokeObjectURL(link.href);
+  ];
 }
 
 function uniqueValues(values) {
@@ -437,6 +555,15 @@ function normalizeKey(value) {
     .replace(/^_|_$/g, "");
 }
 
+function setFormValue(selector, value) {
+  document.querySelector(selector).value = value;
+}
+
+function nextStt() {
+  const max = state.customers.reduce((value, customer) => Math.max(value, Number(customer.stt) || 0), 0);
+  return String(max + 1);
+}
+
 function setImportStatus(message, isError = false) {
   el.importStatus.textContent = message;
   el.importStatus.style.color = isError ? "#ffd0d0" : "#aebfca";
@@ -448,6 +575,24 @@ function formatMoney(value) {
     currency: "VND",
     maximumFractionDigits: 0
   }).format(Number(value || 0));
+}
+
+function formatPlainMoney(value) {
+  return new Intl.NumberFormat("vi-VN", {
+    maximumFractionDigits: 0
+  }).format(Number(value || 0));
+}
+
+function todayStamp() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function downloadBlob(blob, fileName) {
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(link.href);
 }
 
 function csvCell(value) {

@@ -13,7 +13,7 @@
           <span class="brand-mark">CRM</span>
           <div>
             <strong>Quản lý khách hàng</strong>
-            <span>Đồng bộ từ file Excel</span>
+            <span>Đồng bộ với file Excel</span>
           </div>
         </div>
 
@@ -29,8 +29,8 @@
         <div class="sheet-box" id="import">
           <label for="excelFile">File Excel khách hàng</label>
           <input id="excelFile" class="file-input" type="file" accept=".xlsx,.xls,.csv">
-          <button class="primary" id="syncExcelBtn" type="button">Đồng bộ dữ liệu</button>
-          <p id="importStatus" class="muted">Chọn file .xlsx, .xls hoặc .csv có các cột: STT, Khách Hàng, Ngày Chốt, Tiến Trình, Hạn Chốt, Doanh Số, Loại Khách, Ký Hiệu, Giải Thích.</p>
+          <button class="primary" id="syncExcelBtn" type="button">Đồng bộ từ Excel</button>
+          <p id="importStatus" class="muted">Chọn file .xlsx, .xls hoặc .csv. Sau khi thêm/sửa dữ liệu, bấm “Tải Excel đã cập nhật” để xuất file mới.</p>
         </div>
       </aside>
 
@@ -38,10 +38,12 @@
         <header class="topbar">
           <div>
             <p class="eyebrow">Hệ thống CRM</p>
-            <h1>Dữ liệu khách hàng chỉ đồng bộ từ file Excel</h1>
+            <h1>Quản lý dữ liệu khách hàng và xuất ngược về Excel</h1>
           </div>
           <div class="actions">
             <button class="ghost" id="exportBtn" type="button">Xuất CSV</button>
+            <button class="ghost" id="exportExcelBtn" type="button">Tải Excel đã cập nhật</button>
+            <button class="primary" id="addCustomerBtn" type="button">Thêm dữ liệu</button>
           </div>
         </header>
 
@@ -97,13 +99,14 @@
                   <th>Loại khách</th>
                   <th>Ký hiệu</th>
                   <th>Giải thích</th>
+                  <th>Thao tác</th>
                 </tr>
               </thead>
               <tbody id="customerRows"></tbody>
             </table>
             <div class="empty-state" id="emptyState">
               <strong>Chưa có dữ liệu khách hàng</strong>
-              <span>Hãy chọn file Excel rồi bấm đồng bộ dữ liệu.</span>
+              <span>Hãy chọn file Excel để đồng bộ hoặc bấm “Thêm dữ liệu”.</span>
             </div>
           </div>
         </section>
@@ -117,6 +120,51 @@
         </section>
       </main>
     </div>
+
+    <dialog id="customerDialog">
+      <form id="customerForm">
+        <div class="dialog-head">
+          <h2 id="dialogTitle">Thêm dữ liệu</h2>
+          <button class="icon-btn" id="closeDialogBtn" type="button" aria-label="Đóng">×</button>
+        </div>
+
+        <input id="customerId" type="hidden">
+        <div class="form-grid">
+          <label>STT
+            <input id="sttInput" type="number" min="1">
+          </label>
+          <label>Khách Hàng
+            <input id="nameInput" required>
+          </label>
+          <label>Ngày Chốt
+            <input id="closeDateInput" placeholder="31/5">
+          </label>
+          <label>Tiến Trình
+            <input id="progressInput" placeholder="14/14">
+          </label>
+          <label>Hạn Chốt
+            <input id="deadlineInput" placeholder="0 hoặc 6/7">
+          </label>
+          <label>Doanh Số
+            <input id="valueInput" inputmode="numeric" placeholder="200.000">
+          </label>
+          <label>Loại Khách
+            <input id="customerTypeInput" placeholder="Mới, Cũ, Cũ (Vip)">
+          </label>
+          <label>Ký Hiệu
+            <input id="symbolInput" placeholder="lite, mess, zalo">
+          </label>
+          <label class="full">Giải Thích
+            <textarea id="explanationInput" rows="3"></textarea>
+          </label>
+        </div>
+
+        <div class="dialog-actions">
+          <button class="ghost" id="cancelDialogBtn" type="button">Hủy</button>
+          <button class="primary" type="submit">Lưu dữ liệu</button>
+        </div>
+      </form>
+    </dialog>
 
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="app.js"></script>
