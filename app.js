@@ -1,368 +1,365 @@
-const STORAGE_KEY = "crm_customers_v1";
-const STATUSES = ["Moi", "Dang cham soc", "Da mua", "Tam dung"];
+const STORAGE_KEY = "crm_excel_sync_v1";
+const REQUIRED_COLUMNS = ["STT", "Khách Hàng", "Ngày Chốt", "Tiến Trình", "Hạn Chốt", "Doanh Số", "Loại Khách", "Ký Hiệu", "Giải Thích"];
 
 const state = {
-  customers: loadCustomers(),
+  customers: [],
   query: "",
-  status: "",
-  source: ""
+  type: "",
+  symbol: "",
+  fileName: "",
+  syncedAt: ""
 };
 
+let searchTimer = null;
+
 const el = {
+  excelFile: document.querySelector("#excelFile"),
+  syncBtn: document.querySelector("#syncExcelBtn"),
+  exportBtn: document.querySelector("#exportBtn"),
   rows: document.querySelector("#customerRows"),
   empty: document.querySelector("#emptyState"),
   total: document.querySelector("#totalCustomers"),
-  active: document.querySelector("#activeCustomers"),
+  newCustomers: document.querySelector("#newCustomers"),
   revenue: document.querySelector("#expectedRevenue"),
   follow: document.querySelector("#needFollowUp"),
   search: document.querySelector("#searchInput"),
-  statusFilter: document.querySelector("#statusFilter"),
-  sourceFilter: document.querySelector("#sourceFilter"),
+  typeFilter: document.querySelector("#typeFilter"),
+  symbolFilter: document.querySelector("#symbolFilter"),
+  clearFilter: document.querySelector("#clearFilterBtn"),
+  resultCount: document.querySelector("#resultCount"),
+  fileInfo: document.querySelector("#fileInfo"),
   pipeline: document.querySelector("#pipelineGrid"),
   lastUpdated: document.querySelector("#lastUpdated"),
-  dialog: document.querySelector("#customerDialog"),
-  form: document.querySelector("#customerForm"),
-  dialogTitle: document.querySelector("#dialogTitle"),
   importStatus: document.querySelector("#importStatus")
 };
 
-document.querySelector("#openFormBtn").addEventListener("click", () => openCustomerForm());
-document.querySelector("#closeDialogBtn").addEventListener("click", closeDialog);
-document.querySelector("#cancelBtn").addEventListener("click", closeDialog);
-document.querySelector("#exportBtn").addEventListener("click", exportCsv);
-document.querySelector("#sampleBtn").addEventListener("click", loadSampleData);
-document.querySelector("#loadSheetBtn").addEventListener("click", importFromSheet);
-el.search.addEventListener("input", event => {
-  state.query = event.target.value.trim().toLowerCase();
-  render();
-});
-el.statusFilter.addEventListener("change", event => {
-  state.status = event.target.value;
-  render();
-});
-el.sourceFilter.addEventListener("change", event => {
-  state.source = event.target.value;
-  render();
-});
-el.form.addEventListener("submit", saveCustomer);
-
+restoreLastSync();
+bindEvents();
 render();
 
-function loadCustomers() {
+function bindEvents() {
+  el.syncBtn.addEventListener("click", syncFromExcelFile);
+  el.excelFile.addEventListener("change", syncFromExcelFile);
+  el.exportBtn.addEventListener("click", exportCsv);
+  el.clearFilter.addEventListener("click", clearFilters);
+
+  el.search.addEventListener("input", event => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      state.query = normalizeSearch(event.target.value);
+      render();
+    }, 120);
+  });
+
+  el.typeFilter.addEventListener("change", event => {
+    state.type = event.target.value;
+    render();
+  });
+
+  el.symbolFilter.addEventListener("change", event => {
+    state.symbol = event.target.value;
+    render();
+  });
+}
+
+function restoreLastSync() {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (!saved) return;
+    state.customers = Array.isArray(saved.customers) ? saved.customers : [];
+    state.fileName = saved.fileName || "";
+    state.syncedAt = saved.syncedAt || "";
   } catch {
-    return [];
+    state.customers = [];
   }
 }
 
-function persist() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.customers));
-  el.lastUpdated.textContent = `Cap nhat luc ${new Date().toLocaleString("vi-VN")}`;
+function persistSync() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    customers: state.customers,
+    fileName: state.fileName,
+    syncedAt: state.syncedAt
+  }));
+}
+
+async function syncFromExcelFile() {
+  const file = el.excelFile.files?.[0];
+  if (!file) {
+    setImportStatus("Vui lòng chọn file Excel trước khi đồng bộ.", true);
+    return;
+  }
+
+  setImportStatus(`Đang đọc file ${file.name}...`);
+
+  try {
+    const rows = await readWorkbookRows(file);
+    const customers = rowsToCustomers(rows);
+
+    if (!customers.length) {
+      throw new Error("Không tìm thấy dòng khách hàng hợp lệ trong file.");
+    }
+
+    state.customers = customers;
+    state.fileName = file.name;
+    state.syncedAt = new Date().toISOString();
+    persistSync();
+    clearFilters(false);
+    setImportStatus(`Đã đồng bộ ${customers.length} khách hàng từ file Excel.`);
+  } catch (error) {
+    setImportStatus(error.message, true);
+  }
+}
+
+function readWorkbookRows(file) {
+  const extension = file.name.split(".").pop().toLowerCase();
+
+  if (extension === "csv") {
+    return readTextFile(file).then(parseCsvRows);
+  }
+
+  if (!window.XLSX) {
+    return Promise.reject(new Error("Chưa tải được thư viện đọc Excel. Hãy kiểm tra kết nối mạng rồi mở lại trang."));
+  }
+
+  return readArrayBuffer(file).then(buffer => {
+    const workbook = XLSX.read(buffer, { type: "array", cellDates: false });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    return XLSX.utils.sheet_to_json(sheet, {
+      header: 1,
+      raw: false,
+      defval: "",
+      blankrows: false
+    });
+  });
+}
+
+function readArrayBuffer(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("Không đọc được file Excel."));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function readTextFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("Không đọc được file CSV."));
+    reader.readAsText(file, "utf-8");
+  });
+}
+
+function parseCsvRows(text) {
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let quoted = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const next = text[index + 1];
+
+    if (char === '"' && quoted && next === '"') {
+      cell += '"';
+      index += 1;
+    } else if (char === '"') {
+      quoted = !quoted;
+    } else if (char === "," && !quoted) {
+      row.push(cell);
+      cell = "";
+    } else if ((char === "\n" || char === "\r") && !quoted) {
+      if (char === "\r" && next === "\n") index += 1;
+      row.push(cell);
+      if (row.some(value => String(value).trim() !== "")) rows.push(row);
+      row = [];
+      cell = "";
+    } else {
+      cell += char;
+    }
+  }
+
+  row.push(cell);
+  if (row.some(value => String(value).trim() !== "")) rows.push(row);
+  return rows;
+}
+
+function rowsToCustomers(rows) {
+  const headerIndex = findHeaderIndex(rows);
+  if (headerIndex < 0) {
+    throw new Error(`File cần có hàng tiêu đề gồm: ${REQUIRED_COLUMNS.join(", ")}.`);
+  }
+
+  const headers = rows[headerIndex].map(normalizeKey);
+  return rows.slice(headerIndex + 1)
+    .map((row, index) => normalizeCustomer(rowToRecord(headers, row), index))
+    .filter(customer => customer.name && normalizeKey(customer.name) !== "khach_hang");
+}
+
+function findHeaderIndex(rows) {
+  return rows.findIndex(row => {
+    const keys = row.map(normalizeKey);
+    return keys.includes("stt") && keys.includes("khach_hang");
+  });
+}
+
+function rowToRecord(headers, row) {
+  return row.reduce((record, value, index) => {
+    record[headers[index] || `cot_${index}`] = String(value ?? "").trim();
+    return record;
+  }, {});
+}
+
+function normalizeCustomer(record, index) {
+  const find = keys => {
+    const key = keys.find(item => record[item] !== undefined && record[item] !== "");
+    return key ? record[key] : "";
+  };
+
+  const customerType = find(["loai_khach", "type", "customer_type", "cot_6"]) || "Mới";
+
+  return {
+    id: `${find(["stt", "cot_0"]) || index + 1}-${normalizeKey(find(["khach_hang", "ten_khach_hang", "cot_1"]))}`,
+    stt: find(["stt", "so_thu_tu", "thu_tu", "cot_0"]) || String(index + 1),
+    name: find(["khach_hang", "ten_khach_hang", "ho_ten", "ten", "cot_1"]),
+    closeDate: find(["ngay_chot", "chot_ngay", "close_date", "cot_2"]),
+    progress: find(["tien_trinh", "progress", "cot_3"]),
+    deadline: find(["han_chot", "deadline", "cot_4"]),
+    value: parseMoney(find(["doanh_so", "doanh_thu", "gia_tri", "amount", "cot_5"])),
+    customerType,
+    symbol: find(["ky_hieu", "symbol", "tag", "cot_7"]),
+    explanation: find(["giai_thich", "explanation", "description", "cot_8"])
+  };
 }
 
 function render() {
   const customers = getFilteredCustomers();
   renderRows(customers);
   renderMetrics();
-  renderSources();
+  renderFilters();
   renderPipeline();
+  renderSyncInfo();
 }
 
 function getFilteredCustomers() {
   return state.customers.filter(customer => {
-    const haystack = [
+    const haystack = normalizeSearch([
+      customer.stt,
       customer.name,
-      customer.phone,
-      customer.email,
-      customer.source,
-      customer.owner,
-      customer.note
-    ].join(" ").toLowerCase();
+      customer.closeDate,
+      customer.progress,
+      customer.deadline,
+      customer.value,
+      customer.customerType,
+      customer.symbol,
+      customer.explanation
+    ].join(" "));
+
     const matchesQuery = !state.query || haystack.includes(state.query);
-    const matchesStatus = !state.status || customer.status === state.status;
-    const matchesSource = !state.source || customer.source === state.source;
-    return matchesQuery && matchesStatus && matchesSource;
+    const matchesType = !state.type || customer.customerType === state.type;
+    const matchesSymbol = !state.symbol || customer.symbol === state.symbol;
+    return matchesQuery && matchesType && matchesSymbol;
   });
 }
 
 function renderRows(customers) {
+  el.resultCount.textContent = `${customers.length} / ${state.customers.length} khách hàng`;
   el.rows.innerHTML = customers.map(customer => `
     <tr>
-      <td>
-        <strong>${escapeHtml(customer.name || "Chua co ten")}</strong>
-        <span>${escapeHtml(customer.note || "Khong co ghi chu")}</span>
-      </td>
-      <td>
-        <strong>${escapeHtml(customer.phone || "-")}</strong>
-        <span>${escapeHtml(customer.email || "-")}</span>
-      </td>
-      <td>${escapeHtml(customer.source || "-")}</td>
-      <td><span class="status ${statusClass(customer.status)}">${escapeHtml(customer.status || "Moi")}</span></td>
+      <td class="center">${escapeHtml(customer.stt || "-")}</td>
+      <td><strong>${escapeHtml(customer.name || "-")}</strong></td>
+      <td>${escapeHtml(customer.closeDate || "-")}</td>
+      <td>${renderProgress(customer.progress)}</td>
+      <td>${renderDeadline(customer.deadline)}</td>
       <td>${formatMoney(customer.value)}</td>
-      <td>${customer.followUp || "-"}</td>
-      <td>
-        <div class="row-actions">
-          <button type="button" onclick="openCustomerForm('${customer.id}')">Sua</button>
-          <button type="button" onclick="deleteCustomer('${customer.id}')">Xoa</button>
-        </div>
-      </td>
+      <td>${renderCustomerType(customer.customerType)}</td>
+      <td>${escapeHtml(customer.symbol || "-")}</td>
+      <td>${escapeHtml(customer.explanation || "-")}</td>
     </tr>
   `).join("");
   el.empty.style.display = customers.length ? "none" : "block";
 }
 
 function renderMetrics() {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const needFollow = state.customers.filter(customer => {
-    if (!customer.followUp || customer.status === "Da mua") return false;
-    return new Date(customer.followUp) <= today;
-  }).length;
   const revenue = state.customers.reduce((sum, customer) => sum + Number(customer.value || 0), 0);
-
   el.total.textContent = state.customers.length;
-  el.active.textContent = state.customers.filter(customer => customer.status === "Dang cham soc").length;
+  el.newCustomers.textContent = state.customers.filter(customer => normalizeKey(customer.customerType).includes("moi")).length;
   el.revenue.textContent = formatMoney(revenue);
-  el.follow.textContent = needFollow;
+  el.follow.textContent = state.customers.filter(customer => isDeadlineUrgent(customer.deadline)).length;
 }
 
-function renderSources() {
-  const current = el.sourceFilter.value;
-  const sources = [...new Set(state.customers.map(customer => customer.source).filter(Boolean))].sort();
-  el.sourceFilter.innerHTML = '<option value="">Tat ca nguon</option>' + sources
-    .map(source => `<option value="${escapeHtml(source)}">${escapeHtml(source)}</option>`)
+function renderFilters() {
+  fillSelect(el.typeFilter, "Tất cả loại khách", uniqueValues(state.customers.map(customer => customer.customerType)), state.type);
+  fillSelect(el.symbolFilter, "Tất cả ký hiệu", uniqueValues(state.customers.map(customer => customer.symbol)), state.symbol);
+}
+
+function fillSelect(select, label, values, current) {
+  select.innerHTML = `<option value="">${label}</option>` + values
+    .map(value => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`)
     .join("");
-  el.sourceFilter.value = sources.includes(current) ? current : "";
-  state.source = el.sourceFilter.value;
+  select.value = values.includes(current) ? current : "";
 }
 
 function renderPipeline() {
+  const groups = uniqueValues(state.customers.map(customer => customer.customerType));
   const total = Math.max(state.customers.length, 1);
-  el.pipeline.innerHTML = STATUSES.map(status => {
-    const count = state.customers.filter(customer => customer.status === status).length;
+
+  el.pipeline.innerHTML = (groups.length ? groups : ["Chưa có dữ liệu"]).map(type => {
+    const count = state.customers.filter(customer => customer.customerType === type).length;
     const percent = Math.round((count / total) * 100);
     return `
       <div class="pipe-item">
-        <strong>${status}</strong>
-        <span>${count} khach - ${percent}%</span>
+        <strong>${escapeHtml(type)}</strong>
+        <span>${count} khách - ${percent}%</span>
         <div class="bar"><span style="width:${percent}%"></span></div>
       </div>
     `;
   }).join("");
 }
 
-function openCustomerForm(id = "") {
-  const customer = state.customers.find(item => item.id === id);
-  el.dialogTitle.textContent = customer ? "Sua khach hang" : "Them khach hang";
-  document.querySelector("#customerId").value = customer?.id || "";
-  document.querySelector("#nameInput").value = customer?.name || "";
-  document.querySelector("#phoneInput").value = customer?.phone || "";
-  document.querySelector("#emailInput").value = customer?.email || "";
-  document.querySelector("#sourceInput").value = customer?.source || "";
-  document.querySelector("#statusInput").value = customer?.status || "Moi";
-  document.querySelector("#valueInput").value = customer?.value || "";
-  document.querySelector("#followUpInput").value = customer?.followUp || "";
-  document.querySelector("#ownerInput").value = customer?.owner || "";
-  document.querySelector("#noteInput").value = customer?.note || "";
-  el.dialog.showModal();
-}
-
-function closeDialog() {
-  el.dialog.close();
-}
-
-function saveCustomer(event) {
-  event.preventDefault();
-  const id = document.querySelector("#customerId").value || crypto.randomUUID();
-  const nextCustomer = {
-    id,
-    name: document.querySelector("#nameInput").value.trim(),
-    phone: document.querySelector("#phoneInput").value.trim(),
-    email: document.querySelector("#emailInput").value.trim(),
-    source: document.querySelector("#sourceInput").value.trim(),
-    status: document.querySelector("#statusInput").value,
-    value: Number(document.querySelector("#valueInput").value || 0),
-    followUp: document.querySelector("#followUpInput").value,
-    owner: document.querySelector("#ownerInput").value.trim(),
-    note: document.querySelector("#noteInput").value.trim()
-  };
-
-  const existingIndex = state.customers.findIndex(customer => customer.id === id);
-  if (existingIndex >= 0) {
-    state.customers[existingIndex] = nextCustomer;
-  } else {
-    state.customers.unshift(nextCustomer);
-  }
-
-  persist();
-  render();
-  closeDialog();
-}
-
-function deleteCustomer(id) {
-  const customer = state.customers.find(item => item.id === id);
-  if (!customer || !confirm(`Xoa khach hang "${customer.name}"?`)) return;
-  state.customers = state.customers.filter(item => item.id !== id);
-  persist();
-  render();
-}
-
-async function importFromSheet() {
-  const url = document.querySelector("#sheetUrl").value.trim();
-  const sheetId = getSheetId(url);
-  if (!sheetId) {
-    setImportStatus("Khong nhan dien duoc ID Google Sheet.", true);
+function renderSyncInfo() {
+  if (!state.syncedAt) {
+    el.fileInfo.textContent = "Chưa đồng bộ file Excel.";
+    el.lastUpdated.textContent = "Chưa cập nhật";
     return;
   }
 
-  setImportStatus("Dang doc du lieu tu Google Sheet...");
-  try {
-    const json = await loadSheetJsonp(sheetId);
-    const customers = sheetRowsToCustomers(json.table);
-    if (!customers.length) throw new Error("Sheet khong co dong du lieu hop le.");
-    mergeCustomers(customers);
-    setImportStatus(`Da nhap ${customers.length} khach hang tu Google Sheet.`);
-  } catch (error) {
-    setImportStatus(`Chua doc duoc Sheet: ${error.message}. Hay chia se Sheet o che do Anyone with the link can view.`, true);
-  }
+  const syncedAt = new Date(state.syncedAt).toLocaleString("vi-VN");
+  el.fileInfo.textContent = `Nguồn dữ liệu: ${state.fileName}`;
+  el.lastUpdated.textContent = `Đồng bộ lúc ${syncedAt}`;
 }
 
-function loadSheetJsonp(sheetId) {
-  return new Promise((resolve, reject) => {
-    const callbackName = `sheetCallback_${Date.now()}`;
-    const script = document.createElement("script");
-    const timeout = setTimeout(() => {
-      cleanup();
-      reject(new Error("Qua thoi gian cho phan hoi tu Google Sheet"));
-    }, 12000);
-
-    window[callbackName] = data => {
-      cleanup();
-      if (data?.status === "error") {
-        reject(new Error(data.errors?.[0]?.detailed_message || "Google Sheet tra ve loi"));
-      } else {
-        resolve(data);
-      }
-    };
-
-    script.onerror = () => {
-      cleanup();
-      reject(new Error("Khong tai duoc Google Sheet"));
-    };
-
-    script.src = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json;responseHandler:${callbackName}`;
-    document.body.appendChild(script);
-
-    function cleanup() {
-      clearTimeout(timeout);
-      delete window[callbackName];
-      script.remove();
-    }
-  });
-}
-
-function sheetRowsToCustomers(table) {
-  const headers = table.cols.map(col => normalizeKey(col.label || col.id));
-  return table.rows.map(row => {
-    const record = {};
-    row.c.forEach((cell, index) => {
-      record[headers[index] || `cot_${index}`] = cell?.f || cell?.v || "";
-    });
-    return normalizeCustomer(record);
-  }).filter(customer => customer.name || customer.phone || customer.email);
-}
-
-function normalizeCustomer(record) {
-  const find = names => {
-    const key = names.find(name => record[name] !== undefined && record[name] !== "");
-    return key ? String(record[key]).trim() : "";
-  };
-
-  return {
-    id: crypto.randomUUID(),
-    name: find(["ten_khach_hang", "khach_hang", "ho_ten", "ten", "name", "customer"]),
-    phone: find(["so_dien_thoai", "dien_thoai", "sdt", "phone", "mobile"]),
-    email: find(["email", "mail"]),
-    source: find(["nguon", "source", "kenh", "channel"]) || "Google Sheet",
-    status: normalizeStatus(find(["trang_thai", "status", "tinh_trang"])) || "Moi",
-    value: parseNumber(find(["gia_tri", "doanh_thu", "value", "revenue", "amount"])),
-    followUp: parseDate(find(["ngay_hen", "lich_hen", "follow_up", "next_follow_up"])),
-    owner: find(["nhan_vien", "phu_trach", "owner", "sale"]),
-    note: find(["ghi_chu", "note", "notes", "mo_ta"])
-  };
-}
-
-function mergeCustomers(customers) {
-  const known = new Set(state.customers.map(customer => `${customer.phone}|${customer.email}`));
-  const fresh = customers.filter(customer => {
-    const key = `${customer.phone}|${customer.email}`;
-    if (known.has(key) && key !== "|") return false;
-    known.add(key);
-    return true;
-  });
-  state.customers = [...fresh, ...state.customers];
-  persist();
-  render();
-}
-
-function loadSampleData() {
-  mergeCustomers([
-    {
-      id: crypto.randomUUID(),
-      name: "Nguyen Minh Anh",
-      phone: "0901234567",
-      email: "minhanh@example.com",
-      source: "Facebook",
-      status: "Dang cham soc",
-      value: 12000000,
-      followUp: new Date().toISOString().slice(0, 10),
-      owner: "Sale A",
-      note: "Quan tam goi dich vu theo thang"
-    },
-    {
-      id: crypto.randomUUID(),
-      name: "Tran Quoc Bao",
-      phone: "0987654321",
-      email: "bao@example.com",
-      source: "Website",
-      status: "Moi",
-      value: 5500000,
-      followUp: "",
-      owner: "Sale B",
-      note: "Can goi tu van lan dau"
-    },
-    {
-      id: crypto.randomUUID(),
-      name: "Le Hoang Linh",
-      phone: "0911222333",
-      email: "linh@example.com",
-      source: "Zalo",
-      status: "Da mua",
-      value: 24000000,
-      followUp: "",
-      owner: "Sale A",
-      note: "Khach da chot don"
-    }
-  ]);
-  setImportStatus("Da nap du lieu mau.");
+function clearFilters(shouldRender = true) {
+  state.query = "";
+  state.type = "";
+  state.symbol = "";
+  el.search.value = "";
+  el.typeFilter.value = "";
+  el.symbolFilter.value = "";
+  if (shouldRender) render();
 }
 
 function exportCsv() {
-  const headers = ["Ten khach hang", "So dien thoai", "Email", "Nguon", "Trang thai", "Gia tri", "Ngay hen", "Nhan vien", "Ghi chu"];
+  if (!state.customers.length) {
+    setImportStatus("Chưa có dữ liệu để xuất CSV.", true);
+    return;
+  }
+
   const rows = state.customers.map(customer => [
+    customer.stt,
     customer.name,
-    customer.phone,
-    customer.email,
-    customer.source,
-    customer.status,
+    customer.closeDate,
+    customer.progress,
+    customer.deadline,
     customer.value,
-    customer.followUp,
-    customer.owner,
-    customer.note
+    customer.customerType,
+    customer.symbol,
+    customer.explanation
   ]);
-  const csv = [headers, ...rows].map(row => row.map(csvCell).join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const csv = [REQUIRED_COLUMNS, ...rows].map(row => row.map(csvCell).join(",")).join("\n");
+  const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(blob);
   link.download = `khach-hang-${new Date().toISOString().slice(0, 10)}.csv`;
@@ -370,8 +367,63 @@ function exportCsv() {
   URL.revokeObjectURL(link.href);
 }
 
-function getSheetId(url) {
-  return url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)?.[1] || "";
+function uniqueValues(values) {
+  return [...new Set(values.map(value => String(value || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "vi"));
+}
+
+function renderProgress(value) {
+  const text = String(value || "").trim();
+  if (!text || text === "0") return "-";
+  const percent = ratioToPercent(text);
+  return `
+    <div class="ratio-cell">
+      <strong>${escapeHtml(text)}</strong>
+      ${percent > 0 ? `<div class="mini-bar"><span style="width:${percent}%"></span></div>` : ""}
+    </div>
+  `;
+}
+
+function renderDeadline(value) {
+  const text = String(value || "").trim();
+  if (!text || text === "0") return '<span class="soft-tag">0</span>';
+  return `<span class="deadline-tag ${isDeadlineUrgent(text) ? "urgent" : ""}">${escapeHtml(text)}</span>`;
+}
+
+function renderCustomerType(value) {
+  const text = String(value || "Mới").trim();
+  const key = normalizeKey(text);
+  const className = key.includes("vip") ? "vip" : key.includes("cu") ? "old" : "new";
+  return `<span class="type-tag ${className}">${escapeHtml(text)}</span>`;
+}
+
+function ratioToPercent(value) {
+  const match = String(value).match(/(\d+(?:[.,]\d+)?)\s*\/\s*(\d+(?:[.,]\d+)?)/);
+  if (!match) return 0;
+  const current = Number(match[1].replace(",", "."));
+  const total = Number(match[2].replace(",", "."));
+  if (!total) return 0;
+  return Math.max(0, Math.min(100, Math.round((current / total) * 100)));
+}
+
+function isDeadlineUrgent(value) {
+  const text = String(value || "").trim();
+  if (!text || text === "0") return false;
+  return ratioToPercent(text) >= 75 || normalizeKey(text).includes("qua_han");
+}
+
+function parseMoney(value) {
+  const text = String(value || "").trim();
+  const normalized = text
+    .replace(/\s/g, "")
+    .replace(/\.(?=\d{3}(\D|$))/g, "")
+    .replace(/,(?=\d{3}(\D|$))/g, "")
+    .replace(",", ".")
+    .replace(/[^\d.-]/g, "");
+  return Number(normalized || 0);
+}
+
+function normalizeSearch(value) {
+  return normalizeKey(value).replace(/_/g, " ");
 }
 
 function normalizeKey(value) {
@@ -380,41 +432,14 @@ function normalizeKey(value) {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_|_$/g, "");
-}
-
-function normalizeStatus(value) {
-  const raw = normalizeKey(value);
-  if (!raw) return "";
-  if (["da_mua", "chot", "won", "closed"].includes(raw)) return "Da mua";
-  if (["dang_cham_soc", "dang_tu_van", "active", "follow"].includes(raw)) return "Dang cham soc";
-  if (["tam_dung", "ngung", "lost", "pause"].includes(raw)) return "Tam dung";
-  return "Moi";
-}
-
-function parseNumber(value) {
-  const number = String(value || "").replace(/[^\d.-]/g, "");
-  return Number(number || 0);
-}
-
-function parseDate(value) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (!Number.isNaN(date.getTime())) return date.toISOString().slice(0, 10);
-  return "";
 }
 
 function setImportStatus(message, isError = false) {
   el.importStatus.textContent = message;
   el.importStatus.style.color = isError ? "#ffd0d0" : "#aebfca";
-}
-
-function statusClass(status) {
-  if (status === "Dang cham soc") return "active";
-  if (status === "Da mua") return "won";
-  if (status === "Tam dung") return "pause";
-  return "new";
 }
 
 function formatMoney(value) {
