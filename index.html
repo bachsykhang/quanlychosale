@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CRM Khách Hàng</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">CRM</span>
+          <div>
+            <strong>Quản lý khách hàng</strong>
+            <span>Dữ liệu từ Google Sheet</span>
+          </div>
+        </div>
+
+        <nav class="nav-list" aria-label="Điều hướng">
+          <a class="active" href="#dashboard">Tổng quan</a>
+          <a href="#customers">Khách hàng</a>
+          <a href="#pipeline">Trạng thái</a>
+          <a href="#import">Nhập liệu</a>
+        </nav>
+
+        <img class="sidebar-visual" src="assets/crm-visual.svg" alt="" aria-hidden="true">
+
+        <div class="sheet-box" id="import">
+          <label for="sheetUrl">Link Google Sheet</label>
+          <textarea id="sheetUrl" rows="4">https://docs.google.com/spreadsheets/d/136-JgmmnHyGnogKEsV2wht5_wRwTfSXjhc14HuVdjrw/edit?usp=sharing</textarea>
+          <button class="primary" id="loadSheetBtn" type="button">Nhập từ Sheet</button>
+          <button class="ghost" id="sampleBtn" type="button">Nạp dữ liệu mẫu</button>
+          <p id="importStatus" class="muted">Sheet cần được chia sẻ công khai để đọc trực tiếp.</p>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Hệ thống CRM</p>
+            <h1>Chăm sóc khách hàng và theo dõi cơ hội bán hàng</h1>
+          </div>
+          <div class="actions">
+            <button class="ghost" id="exportBtn" type="button">Xuất CSV</button>
+            <button class="primary" id="openFormBtn" type="button">Thêm khách</button>
+          </div>
+        </header>
+
+        <section class="metrics" id="dashboard" aria-label="Chỉ số tổng quan">
+          <article>
+            <span>Tổng khách</span>
+            <strong id="totalCustomers">0</strong>
+          </article>
+          <article>
+            <span>Đang chăm sóc</span>
+            <strong id="activeCustomers">0</strong>
+          </article>
+          <article>
+            <span>Doanh thu dự kiến</span>
+            <strong id="expectedRevenue">0đ</strong>
+          </article>
+          <article>
+            <span>Cần liên hệ</span>
+            <strong id="needFollowUp">0</strong>
+          </article>
+        </section>
+
+        <section class="workspace" id="customers">
+          <div class="toolbar">
+            <div class="search-field">
+              <span aria-hidden="true">Tìm</span>
+              <input id="searchInput" type="search" placeholder="Tên, điện thoại, email, nguồn...">
+            </div>
+            <select id="statusFilter" aria-label="Lọc trạng thái">
+              <option value="">Tất cả trạng thái</option>
+              <option value="Mới">Mới</option>
+              <option value="Đang chăm sóc">Đang chăm sóc</option>
+              <option value="Đã mua">Đã mua</option>
+              <option value="Tạm dừng">Tạm dừng</option>
+            </select>
+            <select id="sourceFilter" aria-label="Lọc nguồn">
+              <option value="">Tất cả nguồn</option>
+            </select>
+            <button class="ghost" id="clearFilterBtn" type="button">Xóa lọc</button>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Khách hàng</th>
+                  <th>Liên hệ</th>
+                  <th>Nguồn</th>
+                  <th>Trạng thái</th>
+                  <th>Giá trị</th>
+                  <th>Ngày hẹn</th>
+                  <th>Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="customerRows"></tbody>
+            </table>
+            <div class="empty-state" id="emptyState">
+              <strong>Chưa có dữ liệu khách hàng</strong>
+              <span>Nhập từ Google Sheet, nạp dữ liệu mẫu hoặc thêm khách mới.</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="pipeline" id="pipeline" aria-label="Thống kê trạng thái">
+          <div class="section-head">
+            <h2>Phân bổ trạng thái</h2>
+            <span id="lastUpdated">Chưa cập nhật</span>
+          </div>
+          <div class="pipeline-grid" id="pipelineGrid"></div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="customerDialog">
+      <form method="dialog" id="customerForm">
+        <div class="dialog-head">
+          <h2 id="dialogTitle">Thêm khách hàng</h2>
+          <button class="icon-btn" value="cancel" type="button" id="closeDialogBtn" aria-label="Đóng">×</button>
+        </div>
+        <input type="hidden" id="customerId">
+        <div class="form-grid">
+          <label>Tên khách hàng
+            <input id="nameInput" required>
+          </label>
+          <label>Số điện thoại
+            <input id="phoneInput">
+          </label>
+          <label>Email
+            <input id="emailInput" type="email">
+          </label>
+          <label>Nguồn
+            <input id="sourceInput" placeholder="Facebook, Zalo, Website...">
+          </label>
+          <label>Trạng thái
+            <select id="statusInput">
+              <option>Mới</option>
+              <option>Đang chăm sóc</option>
+              <option>Đã mua</option>
+              <option>Tạm dừng</option>
+            </select>
+          </label>
+          <label>Giá trị dự kiến
+            <input id="valueInput" type="number" min="0" step="1000">
+          </label>
+          <label>Ngày hẹn
+            <input id="followUpInput" type="date">
+          </label>
+          <label>Nhân viên phụ trách
+            <input id="ownerInput">
+          </label>
+          <label class="full">Ghi chú
+            <textarea id="noteInput" rows="4"></textarea>
+          </label>
+        </div>
+        <div class="dialog-actions">
+          <button class="ghost" type="button" id="cancelBtn">Hủy</button>
+          <button class="primary" type="submit">Lưu khách hàng</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="app.js"></script>
+  </body>
+</html>
