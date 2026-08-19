@@ -12,64 +12,133 @@ const COLUMNS = [
   "Giải Thích"
 ];
 
+
 const state = {
+
   customers: [],
+
   query: "",
+
   type: "",
+
   symbol: "",
+
   deadline: "",
+
   fileName: "",
+
   syncedAt: "",
+
   dirty: false
+
 };
+
 
 let searchTimer = null;
 
+
 const el = {
-  excelFile: document.querySelector("#excelFile"),
-  syncBtn: document.querySelector("#syncExcelBtn"),
 
-  exportBtn: document.querySelector("#exportBtn"),
-  exportExcelBtn: document.querySelector("#exportExcelBtn"),
-  addCustomerBtn: document.querySelector("#addCustomerBtn"),
+  excelFile:
+    document.querySelector("#excelFile"),
 
-  dialog: document.querySelector("#customerDialog"),
-  form: document.querySelector("#customerForm"),
-  dialogTitle: document.querySelector("#dialogTitle"),
-  closeDialogBtn: document.querySelector("#closeDialogBtn"),
-  cancelDialogBtn: document.querySelector("#cancelDialogBtn"),
+  syncBtn:
+    document.querySelector("#syncExcelBtn"),
 
-  rows: document.querySelector("#customerRows"),
-  empty: document.querySelector("#emptyState"),
+  exportBtn:
+    document.querySelector("#exportBtn"),
 
-  total: document.querySelector("#totalCustomers"),
-  newCustomers: document.querySelector("#newCustomers"),
-  revenue: document.querySelector("#expectedRevenue"),
-  follow: document.querySelector("#needFollowUp"),
+  exportExcelBtn:
+    document.querySelector("#exportExcelBtn"),
 
-  search: document.querySelector("#searchInput"),
-  typeFilter: document.querySelector("#typeFilter"),
-  symbolFilter: document.querySelector("#symbolFilter"),
-  deadlineFilter: document.querySelector("#deadlineFilter"),
-  clearFilter: document.querySelector("#clearFilterBtn"),
+  addCustomerBtn:
+    document.querySelector("#addCustomerBtn"),
 
-  resultCount: document.querySelector("#resultCount"),
-  fileInfo: document.querySelector("#fileInfo"),
+  dialog:
+    document.querySelector("#customerDialog"),
 
-  pipeline: document.querySelector("#pipelineGrid"),
-  lastUpdated: document.querySelector("#lastUpdated"),
+  form:
+    document.querySelector("#customerForm"),
 
-  importStatus: document.querySelector("#importStatus")
+  dialogTitle:
+    document.querySelector("#dialogTitle"),
+
+  closeDialogBtn:
+    document.querySelector("#closeDialogBtn"),
+
+  cancelDialogBtn:
+    document.querySelector("#cancelDialogBtn"),
+
+  rows:
+    document.querySelector("#customerRows"),
+
+  empty:
+    document.querySelector("#emptyState"),
+
+  total:
+    document.querySelector("#totalCustomers"),
+
+  newCustomers:
+    document.querySelector("#newCustomers"),
+
+  revenue:
+    document.querySelector("#expectedRevenue"),
+
+  follow:
+    document.querySelector("#needFollowUp"),
+
+  search:
+    document.querySelector("#searchInput"),
+
+  typeFilter:
+    document.querySelector("#typeFilter"),
+
+  symbolFilter:
+    document.querySelector("#symbolFilter"),
+
+  deadlineFilter:
+    document.querySelector("#deadlineFilter"),
+
+  clearFilter:
+    document.querySelector("#clearFilterBtn"),
+
+  resultCount:
+    document.querySelector("#resultCount"),
+
+  filterIndicator:
+    document.querySelector("#filterIndicator"),
+
+  fileInfo:
+    document.querySelector("#fileInfo"),
+
+  pipeline:
+    document.querySelector("#pipelineGrid"),
+
+  lastUpdated:
+    document.querySelector("#lastUpdated"),
+
+  importStatus:
+    document.querySelector("#importStatus"),
+
+  sideTotal:
+    document.querySelector("#sideTotal"),
+
+  sideUrgent:
+    document.querySelector("#sideUrgent")
+
 };
 
+
 restoreData();
+
 bindEvents();
+
 render();
 
 
-/* =========================================================
+/* =========================
    EVENTS
-========================================================= */
+========================= */
 
 function bindEvents() {
 
@@ -78,45 +147,54 @@ function bindEvents() {
     syncFromExcelFile
   );
 
+
   el.excelFile.addEventListener(
     "change",
     syncFromExcelFile
   );
+
 
   el.exportBtn.addEventListener(
     "click",
     exportCsv
   );
 
+
   el.exportExcelBtn.addEventListener(
     "click",
     exportExcel
   );
+
 
   el.addCustomerBtn.addEventListener(
     "click",
     () => openCustomerForm()
   );
 
+
   el.closeDialogBtn.addEventListener(
     "click",
     closeDialog
   );
+
 
   el.cancelDialogBtn.addEventListener(
     "click",
     closeDialog
   );
 
+
   el.form.addEventListener(
     "submit",
     saveCustomer
   );
 
+
   el.clearFilter.addEventListener(
     "click",
-    clearFilters
+    () => clearFilters()
   );
+
 
   el.rows.addEventListener(
     "click",
@@ -124,7 +202,7 @@ function bindEvents() {
   );
 
 
-  /* TÌM KIẾM */
+  /* SEARCH */
 
   el.search.addEventListener(
     "input",
@@ -134,9 +212,8 @@ function bindEvents() {
 
       searchTimer = setTimeout(() => {
 
-        state.query = normalizeSearch(
-          event.target.value
-        );
+        state.query =
+          normalizeSearch(event.target.value);
 
         render();
 
@@ -146,13 +223,14 @@ function bindEvents() {
   );
 
 
-  /* LỌC LOẠI KHÁCH */
+  /* TYPE */
 
   el.typeFilter.addEventListener(
     "change",
     event => {
 
-      state.type = event.target.value;
+      state.type =
+        event.target.value;
 
       render();
 
@@ -160,13 +238,14 @@ function bindEvents() {
   );
 
 
-  /* LỌC KÝ HIỆU */
+  /* SYMBOL */
 
   el.symbolFilter.addEventListener(
     "change",
     event => {
 
-      state.symbol = event.target.value;
+      state.symbol =
+        event.target.value;
 
       render();
 
@@ -174,24 +253,54 @@ function bindEvents() {
   );
 
 
-  /* LỌC HẠN CHỐT */
+  /* DEADLINE */
 
   el.deadlineFilter.addEventListener(
     "change",
     event => {
 
-      state.deadline = event.target.value;
+      state.deadline =
+        event.target.value;
+
+      syncQuickButtons();
 
       render();
 
     }
   );
+
+
+  /* QUICK DEADLINE */
+
+  document
+    .querySelectorAll(".quick-btn")
+    .forEach(button => {
+
+      button.addEventListener(
+        "click",
+        () => {
+
+          state.deadline =
+            button.dataset.deadline;
+
+          el.deadlineFilter.value =
+            state.deadline;
+
+          syncQuickButtons();
+
+          render();
+
+        }
+      );
+
+    });
+
 }
 
 
-/* =========================================================
+/* =========================
    STORAGE
-========================================================= */
+========================= */
 
 function restoreData() {
 
@@ -202,29 +311,34 @@ function restoreData() {
         localStorage.getItem(STORAGE_KEY)
       );
 
-    if (!saved) {
-      return;
-    }
+
+    if (!saved) return;
+
 
     state.customers =
       Array.isArray(saved.customers)
         ? saved.customers
         : [];
 
+
     state.fileName =
       saved.fileName || "";
+
 
     state.syncedAt =
       saved.syncedAt || "";
 
+
     state.dirty =
       Boolean(saved.dirty);
+
 
   } catch {
 
     state.customers = [];
 
   }
+
 }
 
 
@@ -232,74 +346,102 @@ function persistData() {
 
   localStorage.setItem(
     STORAGE_KEY,
+
     JSON.stringify({
-      customers: state.customers,
-      fileName: state.fileName,
-      syncedAt: state.syncedAt,
-      dirty: state.dirty
+
+      customers:
+        state.customers,
+
+      fileName:
+        state.fileName,
+
+      syncedAt:
+        state.syncedAt,
+
+      dirty:
+        state.dirty
+
     })
+
   );
 
 }
 
 
-/* =========================================================
+/* =========================
    IMPORT EXCEL
-========================================================= */
+========================= */
 
 async function syncFromExcelFile() {
 
   const file =
     el.excelFile.files?.[0];
 
+
   if (!file) {
 
     setImportStatus(
-      "Vui lòng chọn file Excel trước khi đồng bộ.",
+      "Vui lòng chọn file Excel trước.",
       true
     );
 
     return;
+
   }
 
+
   setImportStatus(
-    `Đang đọc file ${file.name}...`
+    `Đang đọc ${file.name}...`
   );
+
 
   try {
 
     const rows =
       await readWorkbookRows(file);
 
+
     const customers =
       rowsToCustomers(rows);
+
 
     if (!customers.length) {
 
       throw new Error(
-        "Không tìm thấy dòng khách hàng hợp lệ trong file."
+        "Không tìm thấy dữ liệu khách hàng hợp lệ."
       );
 
     }
 
-    state.customers = customers;
 
-    state.fileName = file.name;
+    state.customers =
+      customers;
+
+
+    state.fileName =
+      file.name;
+
 
     state.syncedAt =
       new Date().toISOString();
 
+
     state.dirty = false;
+
 
     persistData();
 
+
     clearFilters(false);
 
+
     setImportStatus(
-      `Đã đồng bộ ${customers.length} khách hàng từ file Excel.`
+      `Đã đồng bộ ${customers.length} khách hàng.`
     );
 
+
     render();
+
 
   } catch (error) {
 
@@ -309,6 +451,7 @@ async function syncFromExcelFile() {
     );
 
   }
+
 }
 
 
@@ -320,6 +463,7 @@ function readWorkbookRows(file) {
       .pop()
       .toLowerCase();
 
+
   if (extension === "csv") {
 
     return readTextFile(file)
@@ -327,15 +471,17 @@ function readWorkbookRows(file) {
 
   }
 
+
   if (!window.XLSX) {
 
     return Promise.reject(
       new Error(
-        "Chưa tải được thư viện đọc Excel. Hãy kiểm tra kết nối mạng rồi mở lại trang."
+        "Không tải được thư viện Excel. Hãy kiểm tra Internet."
       )
     );
 
   }
+
 
   return readArrayBuffer(file)
     .then(buffer => {
@@ -349,11 +495,14 @@ function readWorkbookRows(file) {
           }
         );
 
+
       const sheetName =
         workbook.SheetNames[0];
 
+
       const sheet =
         workbook.Sheets[sheetName];
+
 
       return XLSX.utils.sheet_to_json(
         sheet,
@@ -378,15 +527,19 @@ function readArrayBuffer(file) {
       const reader =
         new FileReader();
 
-      reader.onload = () =>
-        resolve(reader.result);
 
-      reader.onerror = () =>
-        reject(
-          new Error(
-            "Không đọc được file Excel."
-          )
-        );
+      reader.onload =
+        () => resolve(reader.result);
+
+
+      reader.onerror =
+        () =>
+          reject(
+            new Error(
+              "Không đọc được file Excel."
+            )
+          );
+
 
       reader.readAsArrayBuffer(file);
 
@@ -404,15 +557,19 @@ function readTextFile(file) {
       const reader =
         new FileReader();
 
-      reader.onload = () =>
-        resolve(reader.result);
 
-      reader.onerror = () =>
-        reject(
-          new Error(
-            "Không đọc được file CSV."
-          )
-        );
+      reader.onload =
+        () => resolve(reader.result);
+
+
+      reader.onerror =
+        () =>
+          reject(
+            new Error(
+              "Không đọc được CSV."
+            )
+          );
+
 
       reader.readAsText(
         file,
@@ -425,22 +582,25 @@ function readTextFile(file) {
 }
 
 
-/* =========================================================
-   CSV
-========================================================= */
+/* =========================
+   CSV PARSER
+========================= */
 
 function parseCsvRows(text) {
 
   const rows = [];
 
   let row = [];
+
   let cell = "";
+
   let quoted = false;
+
 
   for (
     let index = 0;
     index < text.length;
-    index += 1
+    index++
   ) {
 
     const char =
@@ -449,6 +609,7 @@ function parseCsvRows(text) {
     const next =
       text[index + 1];
 
+
     if (
       char === '"' &&
       quoted &&
@@ -456,11 +617,14 @@ function parseCsvRows(text) {
     ) {
 
       cell += '"';
-      index += 1;
+
+      index++;
 
     }
 
-    else if (char === '"') {
+    else if (
+      char === '"'
+    ) {
 
       quoted = !quoted;
 
@@ -472,13 +636,16 @@ function parseCsvRows(text) {
     ) {
 
       row.push(cell);
+
       cell = "";
 
     }
 
     else if (
-      (char === "\n" ||
-       char === "\r") &&
+      (
+        char === "\n" ||
+        char === "\r"
+      ) &&
       !quoted
     ) {
 
@@ -486,10 +653,14 @@ function parseCsvRows(text) {
         char === "\r" &&
         next === "\n"
       ) {
-        index += 1;
+
+        index++;
+
       }
 
+
       row.push(cell);
+
 
       if (
         row.some(
@@ -497,10 +668,14 @@ function parseCsvRows(text) {
             String(value).trim() !== ""
         )
       ) {
+
         rows.push(row);
+
       }
 
+
       row = [];
+
       cell = "";
 
     }
@@ -510,9 +685,12 @@ function parseCsvRows(text) {
       cell += char;
 
     }
+
   }
 
+
   row.push(cell);
+
 
   if (
     row.some(
@@ -520,36 +698,44 @@ function parseCsvRows(text) {
         String(value).trim() !== ""
     )
   ) {
+
     rows.push(row);
+
   }
 
+
   return rows;
+
 }
 
 
-/* =========================================================
-   CONVERT EXCEL -> CUSTOMER
-========================================================= */
+/* =========================
+   EXCEL -> CUSTOMER
+========================= */
 
 function rowsToCustomers(rows) {
 
   const headerIndex =
     findHeaderIndex(rows);
 
+
   if (headerIndex < 0) {
 
     throw new Error(
-      `File cần có hàng tiêu đề gồm: ${COLUMNS.join(", ")}.`
+      `File cần có tiêu đề: ${COLUMNS.join(", ")}`
     );
 
   }
+
 
   const headers =
     rows[headerIndex]
       .map(normalizeKey);
 
+
   return rows
     .slice(headerIndex + 1)
+
     .map(
       (row, index) =>
         normalizeCustomer(
@@ -557,11 +743,12 @@ function rowsToCustomers(rows) {
           index
         )
     )
+
     .filter(
       customer =>
         customer.name &&
         normalizeKey(customer.name) !==
-          "khach_hang"
+        "khach_hang"
     );
 
 }
@@ -569,17 +756,20 @@ function rowsToCustomers(rows) {
 
 function findHeaderIndex(rows) {
 
-  return rows.findIndex(row => {
+  return rows.findIndex(
+    row => {
 
-    const keys =
-      row.map(normalizeKey);
+      const keys =
+        row.map(normalizeKey);
 
-    return (
-      keys.includes("stt") &&
-      keys.includes("khach_hang")
-    );
 
-  });
+      return (
+        keys.includes("stt") &&
+        keys.includes("khach_hang")
+      );
+
+    }
+  );
 
 }
 
@@ -587,7 +777,11 @@ function findHeaderIndex(rows) {
 function rowToRecord(headers, row) {
 
   return row.reduce(
-    (record, value, index) => {
+    (
+      record,
+      value,
+      index
+    ) => {
 
       record[
         headers[index] ||
@@ -596,6 +790,7 @@ function rowToRecord(headers, row) {
         String(
           value ?? ""
         ).trim();
+
 
       return record;
 
@@ -620,11 +815,13 @@ function normalizeCustomer(
           record[item] !== ""
       );
 
+
     return key
       ? record[key]
       : "";
 
   };
+
 
   return {
 
@@ -688,8 +885,7 @@ function normalizeCustomer(
         "type",
         "customer_type",
         "cot_6"
-      ]) ||
-      "Mới",
+      ]) || "Mới",
 
     symbol:
       find([
@@ -706,31 +902,40 @@ function normalizeCustomer(
         "description",
         "cot_8"
       ])
+
   };
+
 }
 
 
-/* =========================================================
+/* =========================
    RENDER
-========================================================= */
+========================= */
 
 function render() {
 
   const customers =
     getFilteredCustomers();
 
+
   renderRows(customers);
+
   renderMetrics();
+
   renderFilters();
+
   renderPipeline();
+
   renderSyncInfo();
+
+  syncQuickButtons();
 
 }
 
 
-/* =========================================================
+/* =========================
    FILTER
-========================================================= */
+========================= */
 
 function getFilteredCustomers() {
 
@@ -739,83 +944,37 @@ function getFilteredCustomers() {
 
       const haystack =
         normalizeSearch(
-          customerToRow(customer).join(" ")
+          customerToRow(customer)
+            .join(" ")
         );
+
 
       const matchesQuery =
         !state.query ||
-        haystack.includes(state.query);
+        haystack.includes(
+          state.query
+        );
+
 
       const matchesType =
         !state.type ||
-        customer.customerType === state.type;
+        customer.customerType ===
+          state.type;
+
 
       const matchesSymbol =
         !state.symbol ||
-        customer.symbol === state.symbol;
-
-      let matchesDeadline = true;
-
-
-      switch (state.deadline) {
-
-        /* Không có hạn chốt */
-
-        case "none":
-
-          matchesDeadline =
-            !String(
-              customer.deadline || ""
-            ).trim() ||
-            String(
-              customer.deadline || ""
-            ).trim() === "0";
-
-          break;
+        customer.symbol ===
+          state.symbol;
 
 
-        /* Có hạn chốt */
+      const matchesDeadline =
+        !state.deadline ||
+        matchDeadlineFilter(
+          customer,
+          state.deadline
+        );
 
-        case "has":
-
-          matchesDeadline =
-            String(
-              customer.deadline || ""
-            ).trim() !== "" &&
-            String(
-              customer.deadline || ""
-            ).trim() !== "0";
-
-          break;
-
-
-        /* Sắp đến hạn */
-
-        case "urgent":
-
-          matchesDeadline =
-            isDeadlineUrgent(
-              customer.deadline
-            ) &&
-            !normalizeKey(
-              customer.deadline
-            ).includes("qua_han");
-
-          break;
-
-
-        /* Quá hạn */
-
-        case "overdue":
-
-          matchesDeadline =
-            normalizeKey(
-              customer.deadline
-            ).includes("qua_han");
-
-          break;
-
-      }
 
       return (
         matchesQuery &&
@@ -830,34 +989,117 @@ function getFilteredCustomers() {
 }
 
 
-/* =========================================================
-   RENDER ROWS
-========================================================= */
+/* =========================
+   DEADLINE FILTER
+========================= */
+
+function getDeadlineStatus(value) {
+
+  const text =
+    String(value || "").trim();
+
+
+  if (!text || text === "0") {
+
+    return "zero";
+
+  }
+
+
+  const normalized =
+    normalizeKey(text);
+
+
+  if (
+    normalized.includes("qua_han") ||
+    normalized.includes("overdue")
+  ) {
+
+    return "overdue";
+
+  }
+
+
+  const percent =
+    ratioToPercent(text);
+
+
+  if (percent >= 75) {
+
+    return "urgent";
+
+  }
+
+
+  return "normal";
+
+}
+
+
+function matchDeadlineFilter(
+  customer,
+  filter
+) {
+
+  const status =
+    getDeadlineStatus(
+      customer.deadline
+    );
+
+
+  return status === filter;
+
+}
+
+
+/* =========================
+   TABLE
+========================= */
 
 function renderRows(customers) {
 
   el.resultCount.textContent =
     `${customers.length} / ${state.customers.length} khách hàng`;
 
+
   el.rows.innerHTML =
     customers
-      .map(
-        customer => `
+      .map(customer => {
+
+        return `
+
           <tr>
 
-            <td class="center">
+            <td>
               ${escapeHtml(
                 customer.stt || "-"
               )}
             </td>
 
+
             <td>
-              <strong>
+
+              <strong class="customer-name">
                 ${escapeHtml(
                   customer.name || "-"
                 )}
               </strong>
+
+              ${
+                customer.closeDate
+                  ? `
+                    <span class="customer-sub">
+                      Chốt:
+                      ${escapeHtml(
+                        customer.closeDate
+                      )}
+                    </span>
+                  `
+                  : ""
+              }
+
             </td>
+
 
             <td>
               ${escapeHtml(
@@ -865,11 +1107,13 @@ function renderRows(customers) {
               )}
             </td>
 
+
             <td>
               ${renderProgress(
                 customer.progress
               )}
             </td>
+
 
             <td>
               ${renderDeadline(
@@ -877,11 +1121,13 @@ function renderRows(customers) {
               )}
             </td>
 
+
             <td>
               ${formatMoney(
                 customer.value
               )}
             </td>
+
 
             <td>
               ${renderCustomerType(
@@ -889,11 +1135,21 @@ function renderRows(customers) {
               )}
             </td>
 
+
             <td>
-              ${escapeHtml(
-                customer.symbol || "-"
-              )}
+              ${
+                customer.symbol
+                  ? `
+                    <span class="soft-tag">
+                      ${escapeHtml(
+                        customer.symbol
+                      )}
+                    </span>
+                  `
+                  : "-"
+              }
             </td>
+
 
             <td>
               ${escapeHtml(
@@ -901,11 +1157,13 @@ function renderRows(customers) {
               )}
             </td>
 
+
             <td>
 
               <div class="row-actions">
 
                 <button
+                  class="edit-btn"
                   type="button"
                   data-action="edit"
                   data-id="${customer.id}"
@@ -913,7 +1171,9 @@ function renderRows(customers) {
                   Sửa
                 </button>
 
+
                 <button
+                  class="delete-btn"
                   type="button"
                   data-action="delete"
                   data-id="${customer.id}"
@@ -926,20 +1186,27 @@ function renderRows(customers) {
             </td>
 
           </tr>
-        `
-      )
+
+        `;
+
+      })
       .join("");
+
 
   el.empty.style.display =
     customers.length
       ? "none"
       : "block";
+
+
+  updateFilterIndicator();
+
 }
 
 
-/* =========================================================
+/* =========================
    METRICS
-========================================================= */
+========================= */
 
 function renderMetrics() {
 
@@ -947,12 +1214,28 @@ function renderMetrics() {
     state.customers.reduce(
       (sum, customer) =>
         sum +
-        Number(customer.value || 0),
+        Number(
+          customer.value || 0
+        ),
       0
     );
 
+
+  const urgent =
+    state.customers.filter(
+      customer =>
+        getDeadlineStatus(
+          customer.deadline
+        ) === "urgent" ||
+        getDeadlineStatus(
+          customer.deadline
+        ) === "overdue"
+    ).length;
+
+
   el.total.textContent =
     state.customers.length;
+
 
   el.newCustomers.textContent =
     state.customers.filter(
@@ -962,22 +1245,28 @@ function renderMetrics() {
         ).includes("moi")
     ).length;
 
+
   el.revenue.textContent =
     formatMoney(revenue);
 
+
   el.follow.textContent =
-    state.customers.filter(
-      customer =>
-        isDeadlineUrgent(
-          customer.deadline
-        )
-    ).length;
+    urgent;
+
+
+  el.sideTotal.textContent =
+    state.customers.length;
+
+
+  el.sideUrgent.textContent =
+    urgent;
+
 }
 
 
-/* =========================================================
-   FILTER OPTIONS
-========================================================= */
+/* =========================
+   FILTER SELECT
+========================= */
 
 function renderFilters() {
 
@@ -993,6 +1282,7 @@ function renderFilters() {
     state.type
   );
 
+
   fillSelect(
     el.symbolFilter,
     "Tất cả ký hiệu",
@@ -1004,6 +1294,7 @@ function renderFilters() {
     ),
     state.symbol
   );
+
 
   el.deadlineFilter.value =
     state.deadline;
@@ -1032,16 +1323,96 @@ function fillSelect(
       )
       .join("");
 
+
   select.value =
     values.includes(current)
       ? current
       : "";
+
 }
 
 
-/* =========================================================
+/* =========================
+   QUICK BUTTON
+========================= */
+
+function syncQuickButtons() {
+
+  document
+    .querySelectorAll(".quick-btn")
+    .forEach(button => {
+
+      button.classList.toggle(
+        "active",
+        button.dataset.deadline ===
+          state.deadline
+      );
+
+    });
+
+}
+
+
+function updateFilterIndicator() {
+
+  const active = [];
+
+  if (state.query)
+    active.push("Tìm kiếm");
+
+  if (state.type)
+    active.push(state.type);
+
+  if (state.symbol)
+    active.push(state.symbol);
+
+  if (state.deadline)
+    active.push(
+      deadlineLabel(
+        state.deadline
+      )
+    );
+
+
+  if (!active.length) {
+
+    el.filterIndicator.textContent =
+      "Đang hiển thị tất cả";
+
+    return;
+
+  }
+
+
+  el.filterIndicator.textContent =
+    active.join(" • ");
+
+}
+
+
+function deadlineLabel(value) {
+
+  const labels = {
+
+    zero: "Không hạn",
+
+    normal: "Có hạn",
+
+    urgent: "Khẩn cấp",
+
+    overdue: "Quá hạn"
+
+  };
+
+
+  return labels[value] || value;
+
+}
+
+
+/* =========================
    PIPELINE
-========================================================= */
+========================= */
 
 function renderPipeline() {
 
@@ -1053,11 +1424,13 @@ function renderPipeline() {
       )
     );
 
+
   const total =
     Math.max(
       state.customers.length,
       1
     );
+
 
   el.pipeline.innerHTML =
     (
@@ -1070,15 +1443,19 @@ function renderPipeline() {
         const count =
           state.customers.filter(
             customer =>
-              customer.customerType === type
+              customer.customerType ===
+              type
           ).length;
+
 
         const percent =
           Math.round(
             (count / total) * 100
           );
 
+
         return `
+
           <div class="pipe-item">
 
             <strong>
@@ -1086,26 +1463,30 @@ function renderPipeline() {
             </strong>
 
             <span>
-              ${count} khách - ${percent}%
+              ${count} khách · ${percent}%
             </span>
 
             <div class="bar">
+
               <span
                 style="width:${percent}%"
               ></span>
+
             </div>
 
           </div>
+
         `;
 
       })
       .join("");
+
 }
 
 
-/* =========================================================
+/* =========================
    SYNC INFO
-========================================================= */
+========================= */
 
 function renderSyncInfo() {
 
@@ -1113,38 +1494,47 @@ function renderSyncInfo() {
 
     el.fileInfo.textContent =
       state.dirty
-        ? "Đã có dữ liệu mới, hãy tải Excel đã cập nhật."
-        : "Chưa đồng bộ file Excel.";
+        ? "Có thay đổi chưa xuất Excel."
+        : "Chưa đồng bộ Excel.";
+
 
     el.lastUpdated.textContent =
       "Chưa cập nhật";
 
+
     return;
+
   }
+
 
   const syncedAt =
     new Date(
       state.syncedAt
     ).toLocaleString("vi-VN");
 
+
   const dirtyText =
     state.dirty
-      ? " - Có thay đổi chưa xuất Excel"
+      ? " • Có thay đổi chưa xuất Excel"
       : "";
 
+
   el.fileInfo.textContent =
-    `Nguồn dữ liệu: ${
-      state.fileName || "Excel"
+    `Nguồn: ${
+      state.fileName ||
+      "Excel"
     }${dirtyText}`;
 
+
   el.lastUpdated.textContent =
-    `Đồng bộ lúc ${syncedAt}`;
+    `Cập nhật ${syncedAt}`;
+
 }
 
 
-/* =========================================================
-   EDIT / DELETE
-========================================================= */
+/* =========================
+   ROW ACTION
+========================= */
 
 function handleRowAction(event) {
 
@@ -1153,12 +1543,13 @@ function handleRowAction(event) {
       "button[data-action]"
     );
 
-  if (!button) {
-    return;
-  }
+
+  if (!button) return;
+
 
   if (
-    button.dataset.action === "edit"
+    button.dataset.action ===
+    "edit"
   ) {
 
     openCustomerForm(
@@ -1167,8 +1558,10 @@ function handleRowAction(event) {
 
   }
 
+
   if (
-    button.dataset.action === "delete"
+    button.dataset.action ===
+    "delete"
   ) {
 
     deleteCustomer(
@@ -1176,74 +1569,99 @@ function handleRowAction(event) {
     );
 
   }
+
 }
 
 
-function openCustomerForm(id = "") {
+/* =========================
+   FORM
+========================= */
+
+function openCustomerForm(
+  id = ""
+) {
 
   const customer =
     state.customers.find(
-      item => item.id === id
+      item =>
+        item.id === id
     );
+
 
   el.dialogTitle.textContent =
     customer
       ? "Sửa dữ liệu"
       : "Thêm dữ liệu";
 
+
   setFormValue(
     "#customerId",
     customer?.id || ""
   );
 
+
   setFormValue(
     "#sttInput",
-    customer?.stt || nextStt()
+    customer?.stt ||
+      nextStt()
   );
+
 
   setFormValue(
     "#nameInput",
     customer?.name || ""
   );
 
+
   setFormValue(
     "#closeDateInput",
     customer?.closeDate || ""
   );
+
 
   setFormValue(
     "#progressInput",
     customer?.progress || ""
   );
 
+
   setFormValue(
     "#deadlineInput",
     customer?.deadline || ""
   );
 
+
   setFormValue(
     "#valueInput",
     customer?.value
-      ? formatPlainMoney(customer.value)
+      ? formatPlainMoney(
+          customer.value
+        )
       : ""
   );
 
+
   setFormValue(
     "#customerTypeInput",
-    customer?.customerType || "Mới"
+    customer?.customerType ||
+      "Mới"
   );
+
 
   setFormValue(
     "#symbolInput",
     customer?.symbol || ""
   );
 
+
   setFormValue(
     "#explanationInput",
     customer?.explanation || ""
   );
 
+
   el.dialog.showModal();
+
 }
 
 
@@ -1260,11 +1678,30 @@ function saveCustomer(event) {
 
   event.preventDefault();
 
+
   const id =
     document.querySelector(
       "#customerId"
     ).value ||
     crypto.randomUUID();
+
+
+  const name =
+    document.querySelector(
+      "#nameInput"
+    ).value.trim();
+
+
+  if (!name) {
+
+    alert(
+      "Vui lòng nhập tên khách hàng."
+    );
+
+    return;
+
+  }
+
 
   const customer = {
 
@@ -1276,10 +1713,7 @@ function saveCustomer(event) {
       ).value.trim() ||
       nextStt(),
 
-    name:
-      document.querySelector(
-        "#nameInput"
-      ).value.trim(),
+    name,
 
     closeDate:
       document.querySelector(
@@ -1318,12 +1752,16 @@ function saveCustomer(event) {
       document.querySelector(
         "#explanationInput"
       ).value.trim()
+
   };
+
 
   const index =
     state.customers.findIndex(
-      item => item.id === id
+      item =>
+        item.id === id
     );
+
 
   if (index >= 0) {
 
@@ -1338,184 +1776,244 @@ function saveCustomer(event) {
 
   }
 
+
   markChanged(
-    "Đã lưu dữ liệu. Bấm “Tải Excel đã cập nhật” để đồng bộ ra file Excel."
+    "Đã lưu dữ liệu. Hãy tải Excel để xuất bản cập nhật."
   );
 
+
   closeDialog();
+
 }
 
+
+/* =========================
+   DELETE
+========================= */
 
 function deleteCustomer(id) {
 
   const customer =
     state.customers.find(
-      item => item.id === id
+      item =>
+        item.id === id
     );
 
-  if (
-    !customer ||
-    !confirm(
-      `Xóa khách hàng "${customer.name}"?`
-    )
-  ) {
-    return;
-  }
+
+  if (!customer) return;
+
+
+  const ok =
+    confirm(
+      `Bạn có chắc muốn xóa "${customer.name}"?`
+    );
+
+
+  if (!ok) return;
+
 
   state.customers =
     state.customers.filter(
-      item => item.id !== id
+      item =>
+        item.id !== id
     );
 
+
   markChanged(
-    "Đã xóa dữ liệu. Bấm “Tải Excel đã cập nhật” để đồng bộ ra file Excel."
+    "Đã xóa khách hàng."
   );
+
 }
 
 
-/* =========================================================
+/* =========================
    CHANGE
-========================================================= */
+========================= */
 
 function markChanged(message) {
 
   state.dirty = true;
 
+
   state.syncedAt =
     state.syncedAt ||
     new Date().toISOString();
 
+
   persistData();
 
+
   render();
+
 
   setImportStatus(
     message
   );
+
 }
 
 
-/* =========================================================
+/* =========================
    CLEAR FILTER
-========================================================= */
+========================= */
 
 function clearFilters(
   shouldRender = true
 ) {
 
   state.query = "";
+
   state.type = "";
+
   state.symbol = "";
+
   state.deadline = "";
 
+
   el.search.value = "";
+
   el.typeFilter.value = "";
+
   el.symbolFilter.value = "";
+
   el.deadlineFilter.value = "";
 
-  if (shouldRender) {
+
+  syncQuickButtons();
+
+
+  if (shouldRender)
     render();
-  }
+
 }
 
 
-/* =========================================================
+/* =========================
    EXPORT CSV
-========================================================= */
+========================= */
 
 function exportCsv() {
 
   if (!state.customers.length) {
 
     setImportStatus(
-      "Chưa có dữ liệu để xuất CSV.",
+      "Chưa có dữ liệu để xuất.",
       true
     );
 
     return;
+
   }
+
 
   const csv =
     [
       COLUMNS,
+
       ...state.customers.map(
         customerToRow
       )
+
     ]
+
       .map(
         row =>
           row
             .map(csvCell)
             .join(",")
       )
+
       .join("\n");
+
 
   const blob =
     new Blob(
-      ["\ufeff" + csv],
+      [
+        "\ufeff" + csv
+      ],
       {
         type:
           "text/csv;charset=utf-8"
       }
     );
 
+
   downloadBlob(
     blob,
     `khach-hang-${todayStamp()}.csv`
   );
+
 }
 
 
-/* =========================================================
+/* =========================
    EXPORT EXCEL
-========================================================= */
+========================= */
 
 function exportExcel() {
 
   if (!state.customers.length) {
 
     setImportStatus(
-      "Chưa có dữ liệu để xuất Excel.",
+      "Chưa có dữ liệu để xuất.",
       true
     );
 
     return;
+
   }
+
 
   if (!window.XLSX) {
 
     setImportStatus(
-      "Chưa tải được thư viện xuất Excel. Hãy kiểm tra kết nối mạng rồi mở lại trang.",
+      "Không tải được thư viện Excel.",
       true
     );
 
     return;
+
   }
+
 
   const worksheet =
     XLSX.utils.aoa_to_sheet(
       [
         COLUMNS,
+
         ...state.customers.map(
           customerToRow
         )
       ]
     );
 
+
   worksheet["!cols"] = [
+
     { wch: 8 },
-    { wch: 24 },
-    { wch: 12 },
-    { wch: 12 },
-    { wch: 12 },
-    { wch: 14 },
-    { wch: 14 },
-    { wch: 12 },
-    { wch: 34 }
+
+    { wch: 25 },
+
+    { wch: 13 },
+
+    { wch: 13 },
+
+    { wch: 13 },
+
+    { wch: 15 },
+
+    { wch: 15 },
+
+    { wch: 13 },
+
+    { wch: 40 }
+
   ];
+
 
   const workbook =
     XLSX.utils.book_new();
+
 
   XLSX.utils.book_append_sheet(
     workbook,
@@ -1523,56 +2021,337 @@ function exportExcel() {
     "KhachHang"
   );
 
+
   const fileName =
-    `khach-hang-da-cap-nhat-${todayStamp()}.xlsx`;
+    `khach-hang-${todayStamp()}.xlsx`;
+
 
   XLSX.writeFile(
     workbook,
     fileName
   );
 
+
   state.dirty = false;
+
   state.fileName = fileName;
 
   state.syncedAt =
     new Date().toISOString();
 
+
   persistData();
 
   render();
 
+
   setImportStatus(
-    "Đã tải file Excel đã cập nhật."
+    "Đã xuất Excel thành công."
   );
+
 }
 
 
-/* =========================================================
+/* =========================
    CUSTOMER ROW
-========================================================= */
+========================= */
 
-function customerToRow(customer) {
+function customerToRow(
+  customer
+) {
 
   return [
+
     customer.stt,
+
     customer.name,
+
     customer.closeDate,
+
     customer.progress,
+
     customer.deadline,
-    Number(customer.value || 0),
+
+    Number(
+      customer.value || 0
+    ),
+
     customer.customerType,
+
     customer.symbol,
+
     customer.explanation
+
   ];
 
 }
 
 
-/* =========================================================
-   UNIQUE
-========================================================= */
+/* =========================
+   PROGRESS
+========================= */
 
-function uniqueValues(values) {
+function renderProgress(
+  value
+) {
+
+  const text =
+    String(
+      value || ""
+    ).trim();
+
+
+  if (
+    !text ||
+    text === "0"
+  ) {
+
+    return "-";
+
+  }
+
+
+  const percent =
+    ratioToPercent(text);
+
+
+  return `
+
+    <div class="ratio-cell">
+
+      <strong>
+        ${escapeHtml(text)}
+      </strong>
+
+      ${
+        percent > 0
+          ? `
+            <div class="mini-bar">
+
+              <span
+                style="width:${percent}%"
+              ></span>
+
+            </div>
+          `
+          : ""
+      }
+
+    </div>
+
+  `;
+
+}
+
+
+/* =========================
+   DEADLINE UI
+========================= */
+
+function renderDeadline(
+  value
+) {
+
+  const text =
+    String(
+      value || ""
+    ).trim();
+
+
+  if (
+    !text ||
+    text === "0"
+  ) {
+
+    return `
+      <span class="soft-tag">
+        Không hạn
+      </span>
+    `;
+
+  }
+
+
+  const status =
+    getDeadlineStatus(text);
+
+
+  if (status === "overdue") {
+
+    return `
+      <span class="deadline-tag overdue">
+        Quá hạn
+      </span>
+    `;
+
+  }
+
+
+  if (status === "urgent") {
+
+    return `
+      <span class="deadline-tag urgent">
+        ${escapeHtml(text)}
+      </span>
+    `;
+
+  }
+
+
+  return `
+    <span class="deadline-tag">
+      ${escapeHtml(text)}
+    </span>
+  `;
+
+}
+
+
+/* =========================
+   CUSTOMER TYPE
+========================= */
+
+function renderCustomerType(
+  value
+) {
+
+  const text =
+    String(
+      value || "Mới"
+    ).trim();
+
+
+  const key =
+    normalizeKey(text);
+
+
+  const className =
+    key.includes("vip")
+      ? "vip"
+      : key.includes("cu")
+        ? "old"
+        : "new";
+
+
+  return `
+
+    <span
+      class="type-tag ${className}"
+    >
+      ${escapeHtml(text)}
+    </span>
+
+  `;
+
+}
+
+
+/* =========================
+   RATIO
+========================= */
+
+function ratioToPercent(
+  value
+) {
+
+  const match =
+    String(value).match(
+      /(\d+(?:[.,]\d+)?)\s*\/\s*(\d+(?:[.,]\d+)?)/
+    );
+
+
+  if (!match)
+    return 0;
+
+
+  const current =
+    Number(
+      match[1]
+        .replace(",", ".")
+    );
+
+
+  const total =
+    Number(
+      match[2]
+        .replace(",", ".")
+    );
+
+
+  if (!total)
+    return 0;
+
+
+  return Math.max(
+    0,
+    Math.min(
+      100,
+      Math.round(
+        (current / total) * 100
+      )
+    )
+  );
+
+}
+
+
+/* =========================
+   MONEY
+========================= */
+
+function parseMoney(
+  value
+) {
+
+  const text =
+    String(
+      value || ""
+    ).trim();
+
+
+  const normalized =
+    text
+
+      .replace(
+        /\s/g,
+        ""
+      )
+
+      .replace(
+        /\.(?=\d{3}(\D|$))/g,
+        ""
+      )
+
+      .replace(
+        /,(?=\d{3}(\D|$))/g,
+        ""
+      )
+
+      .replace(
+        ",",
+        "."
+      )
+
+      .replace(
+        /[^\d.-]/g,
+        ""
+      );
+
+
+  return Number(
+    normalized || 0
+  );
+
+}
+
+
+/* =========================
+   HELPERS
+========================= */
+
+function uniqueValues(
+  values
+) {
 
   return [
     ...new Set(
@@ -1586,277 +2365,65 @@ function uniqueValues(values) {
         .filter(Boolean)
     )
   ].sort(
-    (a, b) =>
+    (a,b) =>
       a.localeCompare(
         b,
         "vi"
       )
   );
+
 }
 
 
-/* =========================================================
-   PROGRESS
-========================================================= */
-
-function renderProgress(value) {
-
-  const text =
-    String(
-      value || ""
-    ).trim();
-
-  if (
-    !text ||
-    text === "0"
-  ) {
-    return "-";
-  }
-
-  const percent =
-    ratioToPercent(text);
-
-  return `
-    <div class="ratio-cell">
-
-      <strong>
-        ${escapeHtml(text)}
-      </strong>
-
-      ${
-        percent > 0
-          ? `
-            <div class="mini-bar">
-              <span
-                style="width:${percent}%"
-              ></span>
-            </div>
-          `
-          : ""
-      }
-
-    </div>
-  `;
-}
-
-
-/* =========================================================
-   DEADLINE
-========================================================= */
-
-function renderDeadline(value) {
-
-  const text =
-    String(
-      value || ""
-    ).trim();
-
-  if (
-    !text ||
-    text === "0"
-  ) {
-
-    return `
-      <span class="soft-tag">
-        0
-      </span>
-    `;
-
-  }
-
-  const isUrgent =
-    isDeadlineUrgent(text);
-
-  return `
-    <span
-      class="deadline-tag ${
-        isUrgent
-          ? "urgent"
-          : ""
-      }"
-    >
-      ${escapeHtml(text)}
-    </span>
-  `;
-}
-
-
-/* =========================================================
-   CUSTOMER TYPE
-========================================================= */
-
-function renderCustomerType(value) {
-
-  const text =
-    String(
-      value || "Mới"
-    ).trim();
-
-  const key =
-    normalizeKey(text);
-
-  const className =
-    key.includes("vip")
-      ? "vip"
-      : key.includes("cu")
-        ? "old"
-        : "new";
-
-  return `
-    <span
-      class="type-tag ${className}"
-    >
-      ${escapeHtml(text)}
-    </span>
-  `;
-}
-
-
-/* =========================================================
-   RATIO
-========================================================= */
-
-function ratioToPercent(value) {
-
-  const match =
-    String(value).match(
-      /(\d+(?:[.,]\d+)?)\s*\/\s*(\d+(?:[.,]\d+)?)/
-    );
-
-  if (!match) {
-    return 0;
-  }
-
-  const current =
-    Number(
-      match[1].replace(",", ".")
-    );
-
-  const total =
-    Number(
-      match[2].replace(",", ".")
-    );
-
-  if (!total) {
-    return 0;
-  }
-
-  return Math.max(
-    0,
-    Math.min(
-      100,
-      Math.round(
-        (current / total) * 100
-      )
-    )
-  );
-}
-
-
-/* =========================================================
-   DEADLINE URGENT
-========================================================= */
-
-function isDeadlineUrgent(value) {
-
-  const text =
-    String(
-      value || ""
-    ).trim();
-
-  if (
-    !text ||
-    text === "0"
-  ) {
-    return false;
-  }
-
-  return (
-    ratioToPercent(text) >= 75 ||
-    normalizeKey(text).includes(
-      "qua_han"
-    )
-  );
-}
-
-
-/* =========================================================
-   MONEY
-========================================================= */
-
-function parseMoney(value) {
-
-  const text =
-    String(
-      value || ""
-    ).trim();
-
-  const normalized =
-    text
-      .replace(/\s/g, "")
-      .replace(
-        /\.(?=\d{3}(\D|$))/g,
-        ""
-      )
-      .replace(
-        /,(?=\d{3}(\D|$))/g,
-        ""
-      )
-      .replace(",", ".")
-      .replace(
-        /[^\d.-]/g,
-        ""
-      );
-
-  return Number(
-    normalized || 0
-  );
-}
-
-
-/* =========================================================
-   SEARCH
-========================================================= */
-
-function normalizeSearch(value) {
+function normalizeSearch(
+  value
+) {
 
   return normalizeKey(value)
     .replace(
       /_/g,
       " "
     );
+
 }
 
 
-function normalizeKey(value) {
+function normalizeKey(
+  value
+) {
 
   return String(
     value || ""
   )
+
     .trim()
+
     .toLowerCase()
+
     .normalize("NFD")
+
     .replace(
       /[\u0300-\u036f]/g,
       ""
     )
+
     .replace(
       /đ/g,
       "d"
     )
+
     .replace(
       /[^a-z0-9]+/g,
       "_"
     )
+
     .replace(
       /^_|_$/g,
-      "");
+      ""
+    );
+
 }
 
-
-/* =========================================================
-   FORM
-========================================================= */
 
 function setFormValue(
   selector,
@@ -1874,7 +2441,10 @@ function nextStt() {
 
   const max =
     state.customers.reduce(
-      (value, customer) =>
+      (
+        value,
+        customer
+      ) =>
         Math.max(
           value,
           Number(
@@ -1884,15 +2454,13 @@ function nextStt() {
       0
     );
 
+
   return String(
     max + 1
   );
+
 }
 
-
-/* =========================================================
-   STATUS
-========================================================= */
 
 function setImportStatus(
   message,
@@ -1902,33 +2470,40 @@ function setImportStatus(
   el.importStatus.textContent =
     message;
 
+
   el.importStatus.style.color =
     isError
-      ? "#ffd0d0"
+      ? "#ffb4b4"
       : "#aebfca";
+
 }
 
 
-/* =========================================================
-   MONEY FORMAT
-========================================================= */
-
-function formatMoney(value) {
+function formatMoney(
+  value
+) {
 
   return new Intl.NumberFormat(
     "vi-VN",
     {
       style: "currency",
+
       currency: "VND",
+
       maximumFractionDigits: 0
     }
   ).format(
-    Number(value || 0)
+    Number(
+      value || 0
+    )
   );
+
 }
 
 
-function formatPlainMoney(value) {
+function formatPlainMoney(
+  value
+) {
 
   return new Intl.NumberFormat(
     "vi-VN",
@@ -1936,26 +2511,25 @@ function formatPlainMoney(value) {
       maximumFractionDigits: 0
     }
   ).format(
-    Number(value || 0)
+    Number(
+      value || 0
+    )
   );
+
 }
 
-
-/* =========================================================
-   DATE
-========================================================= */
 
 function todayStamp() {
 
   return new Date()
     .toISOString()
-    .slice(0, 10);
+    .slice(
+      0,
+      10
+    );
+
 }
 
-
-/* =========================================================
-   DOWNLOAD
-========================================================= */
 
 function downloadBlob(
   blob,
@@ -1963,27 +2537,46 @@ function downloadBlob(
 ) {
 
   const link =
-    document.createElement("a");
+    document.createElement(
+      "a"
+    );
+
 
   link.href =
-    URL.createObjectURL(blob);
+    URL.createObjectURL(
+      blob
+    );
+
 
   link.download =
     fileName;
 
+
+  document.body.appendChild(
+    link
+  );
+
+
   link.click();
 
-  URL.revokeObjectURL(
-    link.href
+
+  link.remove();
+
+
+  setTimeout(
+    () =>
+      URL.revokeObjectURL(
+        link.href
+      ),
+    1000
   );
+
 }
 
 
-/* =========================================================
-   CSV CELL
-========================================================= */
-
-function csvCell(value) {
+function csvCell(
+  value
+) {
 
   return `"${String(
     value ?? ""
@@ -1991,36 +2584,41 @@ function csvCell(value) {
     /"/g,
     '""'
   )}"`;
+
 }
 
 
-/* =========================================================
-   ESCAPE HTML
-========================================================= */
-
-function escapeHtml(value) {
+function escapeHtml(
+  value
+) {
 
   return String(
     value ?? ""
   )
+
     .replace(
       /&/g,
       "&amp;"
     )
+
     .replace(
       /</g,
       "&lt;"
     )
+
     .replace(
       />/g,
       "&gt;"
     )
+
     .replace(
       /"/g,
       "&quot;"
     )
+
     .replace(
       /'/g,
       "&#039;"
     );
+
 }
