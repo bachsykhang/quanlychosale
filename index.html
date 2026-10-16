@@ -1,368 +1,612 @@
+
 <!doctype html>
 <html lang="vi">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-
-  <title>CRM Khách Hàng</title>
+  <title>CRM Khách Hàng | Chợ Sale Gia Nghĩa</title>
   <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script defer src="app.js"></script>
 </head>
-
 <body>
-<div class="app-shell">
-
-  <!-- THANH BÊN -->
+<div class="layout">
   <aside class="sidebar">
     <div class="brand">
-      <span class="brand-mark">CRM</span>
-      <div>
-        <strong>Quản lý khách hàng</strong>
-        <span>Đồng bộ với Excel</span>
-      </div>
+      <div class="logo">CS</div>
+      <div><b>CHỢ SALE</b><small>GIA NGHĨA CRM</small></div>
     </div>
-
-    <nav class="nav-list">
-      <a class="active" href="#dashboard">Tổng quan</a>
-      <a href="#customers">Danh sách</a>
-      <a href="#pipeline">Loại khách</a>
-      <a href="#import">Đồng bộ</a>
-    </nav>
-
-    <div class="sidebar-stats">
-      <div class="side-stat">
-        <span>Tổng khách</span>
-        <strong id="sideTotal">0</strong>
-      </div>
-      <div class="side-stat">
-        <span>Khẩn cấp</span>
-        <strong id="sideUrgent">0</strong>
-      </div>
-    </div>
-
-    <div class="sheet-box" id="import">
-      <label for="excelFile">File Excel khách hàng</label>
-
-      <input
-        id="excelFile"
-        class="file-input"
-        type="file"
-        accept=".xlsx,.xls,.csv"
-      >
-
-      <button
-        class="primary full-btn"
-        id="syncExcelBtn"
-        type="button"
-      >
-        Đồng bộ từ Excel
-      </button>
-
-      <p id="importStatus" class="muted">
-        Chọn file Excel để bắt đầu.
-      </p>
+    <p class="side-label">QUẢN LÝ</p>
+    <button class="nav active" data-page="dashboard">▦ <span>Tổng quan</span></button>
+    <button class="nav" data-page="customers">♙ <span>Khách hàng</span></button>
+    <div class="side-foot">
+      <b>CRM SYSTEM</b>
+      <p>Quản lý khách hàng, tiến trình và doanh số.</p>
+      <span>● Dữ liệu lưu trên thiết bị</span>
     </div>
   </aside>
 
-  <!-- NỘI DUNG CHÍNH -->
   <main class="main">
-
-    <!-- TIÊU ĐỀ -->
     <header class="topbar">
       <div>
-        <p class="eyebrow">HỆ THỐNG CRM</p>
-
-        <h1>
-          Quản lý dữ liệu khách hàng Chợ Sale Gia Nghĩa
-        </h1>
-
-        <p class="subtitle">
-          Theo dõi khách hàng, hạn chốt, doanh số và xuất biên lai
-        </p>
+        <p class="eyebrow">HỆ THỐNG QUẢN LÝ</p>
+        <h1>CRM Khách Hàng</h1>
       </div>
-
-      <div class="actions">
-        <button class="ghost" id="exportBtn" type="button">
-          Xuất CSV
-        </button>
-
-        <button class="ghost" id="exportExcelBtn" type="button">
-          Tải Excel
-        </button>
-
-        <button class="primary" id="addCustomerBtn" type="button">
-          + Thêm khách
-        </button>
+      <div class="top-actions">
+        <button class="btn light" id="backupBtn">Sao lưu JSON</button>
+        <button class="btn primary" id="addBtn">＋ Thêm khách hàng</button>
       </div>
     </header>
 
-    <!-- THỐNG KÊ -->
-    <section class="metrics" id="dashboard">
-
-      <article class="metric-card">
-        <div class="metric-icon blue">👥</div>
+    <section id="dashboard" class="page">
+      <div class="welcome">
         <div>
-          <span>Tổng khách</span>
-          <strong id="totalCustomers">0</strong>
+          <p class="eyebrow">CHỢ SALE GIA NGHĨA</p>
+          <h2>Quản lý khách hàng hiệu quả hơn</h2>
+          <p>Theo dõi doanh số, tiến trình và hạn chốt trên một màn hình.</p>
         </div>
-      </article>
+        <div class="welcome-icon">📊</div>
+      </div>
 
-      <article class="metric-card">
-        <div class="metric-icon green">✨</div>
-        <div>
-          <span>Khách mới</span>
-          <strong id="newCustomers">0</strong>
+      <div class="stats">
+        <article class="stat">
+          <div>Tổng khách hàng <span>♙</span></div>
+          <strong id="statTotal">0</strong>
+          <small>Khách hàng trong hệ thống</small>
+        </article>
+        <article class="stat">
+          <div>Khách mới <span>✦</span></div>
+          <strong id="statNew">0</strong>
+          <small>Được phân loại khách mới</small>
+        </article>
+        <article class="stat">
+          <div>Tổng doanh số <span>₫</span></div>
+          <strong id="statRevenue">0 ₫</strong>
+          <small>Tổng giá trị đã nhập</small>
+        </article>
+        <article class="stat">
+          <div>Hạn chốt cần chú ý <span>◷</span></div>
+          <strong id="statUrgent">0</strong>
+          <small>Hôm nay hoặc đã quá hạn</small>
+        </article>
+      </div>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h3>Khách hàng gần đây</h3>
+            <p>Danh sách cập nhật gần nhất</p>
+          </div>
+          <button class="btn light" id="viewAllBtn">Xem tất cả →</button>
         </div>
-      </article>
-
-      <article class="metric-card">
-        <div class="metric-icon orange">💰</div>
-        <div>
-          <span>Tổng doanh số</span>
-          <strong id="expectedRevenue">0đ</strong>
-        </div>
-      </article>
-
-      <article class="metric-card danger-card">
-        <div class="metric-icon red">⚠</div>
-        <div>
-          <span>Cần chú ý</span>
-          <strong id="needFollowUp">0</strong>
-        </div>
-      </article>
-
+        <div id="recentList" class="recent-list"></div>
+      </section>
     </section>
 
-    <!-- LỌC NHANH -->
-    <section class="quick-filter">
-      <div>
-        <strong>Lọc nhanh</strong>
-        <span>Lọc khách hàng theo tình trạng hạn chốt</span>
-      </div>
-
-      <div class="quick-buttons">
-        <button class="quick-btn active" data-deadline="">
-          Tất cả
-        </button>
-
-        <button class="quick-btn" data-deadline="zero">
-          Không hạn
-        </button>
-
-        <button class="quick-btn" data-deadline="normal">
-          Có hạn
-        </button>
-
-        <button class="quick-btn" data-deadline="urgent">
-          Khẩn cấp
-        </button>
-
-        <button class="quick-btn" data-deadline="overdue">
-          Quá hạn
-        </button>
-      </div>
-    </section>
-
-    <!-- DANH SÁCH KHÁCH HÀNG -->
-    <section class="workspace" id="customers">
-
-      <div class="toolbar">
-        <div class="search-field">
-          <span>⌕</span>
-          <input
-            id="searchInput"
-            type="search"
-            placeholder="Tìm tên, loại khách, ký hiệu, giải thích..."
-          >
-        </div>
-
-        <select id="typeFilter">
-          <option value="">Tất cả loại khách</option>
-        </select>
-
-        <select id="symbolFilter">
-          <option value="">Tất cả ký hiệu</option>
-        </select>
-
-        <select id="deadlineFilter">
-          <option value="">Tất cả hạn chốt</option>
-          <option value="zero">Không hạn</option>
-          <option value="normal">Có hạn</option>
-          <option value="urgent">Khẩn cấp</option>
-          <option value="overdue">Quá hạn</option>
-        </select>
-
-        <button class="ghost" id="clearFilterBtn" type="button">
-          Đặt lại
-        </button>
-      </div>
-
-      <!-- THÔNG TIN DANH SÁCH -->
-      <div class="list-summary">
+    <section id="customers" class="page hidden">
+      <div class="page-title">
         <div>
-          <strong id="resultCount">0 khách hàng</strong>
-          <span class="filter-indicator" id="filterIndicator">
-            Đang hiển thị tất cả
-          </span>
+          <p class="eyebrow">DỮ LIỆU KINH DOANH</p>
+          <h2>Danh sách khách hàng</h2>
+          <p class="muted">Thêm, chỉnh sửa, nhập và xuất dữ liệu.</p>
         </div>
-
-        <span id="fileInfo">Chưa đồng bộ Excel.</span>
+        <button class="btn primary" id="addBtn2">＋ Thêm khách hàng</button>
       </div>
 
-      <!-- BẢNG KHÁCH HÀNG -->
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>STT</th>
-              <th>Khách hàng</th>
-              <th>Ngày chốt</th>
-              <th>Tiến trình</th>
-              <th>Hạn chốt</th>
-              <th>Doanh số</th>
-              <th>Loại khách</th>
-              <th>Ký hiệu</th>
-              <th>Giải thích</th>
-              <th>Thao tác</th>
-            </tr>
-          </thead>
+      <section class="panel">
+        <div class="toolbar">
+          <input id="searchInput" class="search" type="search"
+            placeholder="Tìm tên khách, ghi chú, tiến trình...">
 
-          <tbody id="customerRows"></tbody>
-        </table>
+          <select id="typeFilter">
+            <option value="">Tất cả loại khách</option>
+            <option>Mới</option>
+            <option>Cũ</option>
+            <option>Cũ (Vip)</option>
+          </select>
 
-        <div class="empty-state" id="emptyState">
-          <div class="empty-icon">📂</div>
-          <strong>Không tìm thấy khách hàng</strong>
-          <span>
-            Hãy thay đổi bộ lọc hoặc thêm dữ liệu mới.
-          </span>
+          <select id="symbolFilter">
+            <option value="">Tất cả ký hiệu</option>
+            <option value="lite">Lite</option>
+            <option value="mess">Messenger</option>
+            <option value="zalo">Zalo</option>
+          </select>
+
+          <button type="button" class="btn primary" id="uploadExcelBtn">
+            📤 Tải file Excel lên
+          </button>
+          <input type="file" id="importFile" accept=".xlsx,.xls,.csv" hidden>
+
+          <button class="btn light" id="exportExcelBtn">Xuất Excel</button>
+          <button class="btn light" id="exportCsvBtn">Xuất CSV</button>
+          <button class="btn light" id="restoreBtn">Khôi phục JSON</button>
+          <input type="file" id="restoreFile" accept=".json" hidden>
+        </div>
+
+        <div class="table-tools">
+          <div>
+            <b>Tất cả khách hàng</b>
+            <span id="resultCount" class="muted">0 khách hàng</span>
+          </div>
+          <div>
+            <button class="btn small light" id="scrollTopBtn">↑ Lên đầu</button>
+            <button class="btn small light" id="scrollBottomBtn">↓ Xuống cuối</button>
+          </div>
+        </div>
+
+        <div class="table-wrap" id="tableWrap" tabindex="0"
+          aria-label="Bảng khách hàng có thể cuộn">
+          <table>
+            <thead>
+              <tr>
+                <th>STT</th>
+                <th>Khách hàng</th>
+                <th>Ngày chốt</th>
+                <th>Tiến trình</th>
+                <th>Hạn chốt</th>
+                <th>Doanh số</th>
+                <th>Loại khách</th>
+                <th>Ký hiệu</th>
+                <th>Giải thích</th>
+                <th>Thao tác</th>
+              </tr>
+            </thead>
+            <tbody id="customerBody"></tbody>
+          </table>
+        </div>
+
+        <div id="emptyState" class="empty hidden">
+          <h3>Chưa có dữ liệu khách hàng</h3>
+          <p>Thêm khách hàng hoặc tải file Excel/CSV lên.</p>
+          <button class="btn primary" id="emptyAddBtn">＋ Thêm khách hàng</button>
+        </div>
+      </section>
+    </section>
+
+    <!-- ĐỌC NGÀY CHỐT VÀ HẠN CHỐT TỪ EXCEL -->
+    <section id="excelDates" class="excel-date-section">
+      <div class="panel excel-date-panel">
+        <div class="panel-head">
+          <div>
+            <h3>Tra cứu Ngày Chốt và Hạn Chốt từ Excel</h3>
+            <p>Đọc riêng hai cột ngày, không thay đổi dữ liệu CRM hiện tại.</p>
+          </div>
+        </div>
+
+        <div class="excel-date-controls">
+          <input id="dateExcelFile" type="file" accept=".xlsx,.xls,.csv"
+            aria-label="Chọn file Excel để đọc ngày chốt">
+          <button type="button" class="btn primary" id="readDateExcelBtn">
+            Đọc dữ liệu ngày
+          </button>
+          <button type="button" class="btn light" id="clearDateExcelBtn">
+            Xóa bảng
+          </button>
+        </div>
+
+        <p id="dateExcelMessage" class="muted" role="status">
+          Chọn file Excel để hiển thị Ngày Chốt và Hạn Chốt.
+        </p>
+
+        <div class="table-wrap excel-date-table-wrap">
+          <table class="excel-date-table">
+            <thead>
+              <tr>
+                <th>STT</th>
+                <th>Khách hàng</th>
+                <th>Ngày Chốt</th>
+                <th>Hạn Chốt</th>
+              </tr>
+            </thead>
+            <tbody id="dateExcelTableBody">
+              <tr><td colspan="4" class="muted">Chưa có dữ liệu.</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </section>
 
-    <!-- THỐNG KÊ LOẠI KHÁCH -->
-    <section class="pipeline" id="pipeline">
-      <div class="section-head">
-        <div>
-          <h2>Phân bổ loại khách</h2>
-          <span>Thống kê dữ liệu hiện tại</span>
-        </div>
-
-        <span id="lastUpdated">Chưa cập nhật</span>
-      </div>
-
-      <div class="pipeline-grid" id="pipelineGrid"></div>
-    </section>
-
+    <footer>
+      © <span id="year"></span> Chợ Sale Gia Nghĩa
+      <span>CRM nội bộ · V3.4</span>
+    </footer>
   </main>
 </div>
 
-<!-- HỘP THÊM / SỬA KHÁCH HÀNG -->
-<dialog id="customerDialog">
-  <form id="customerForm">
-
-    <div class="dialog-head">
+<!-- FORM THÊM / SỬA KHÁCH HÀNG -->
+<div class="modal-backdrop hidden" id="modalBackdrop">
+  <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <header class="modal-head">
       <div>
-        <span class="eyebrow">CRM</span>
-        <h2 id="dialogTitle">Thêm dữ liệu</h2>
+        <p class="eyebrow">THÔNG TIN KHÁCH HÀNG</p>
+        <h2 id="modalTitle">Thêm khách hàng</h2>
+      </div>
+      <button type="button" class="xbtn" id="closeModal">✕</button>
+    </header>
+
+    <form id="customerForm">
+      <input type="hidden" id="customerId">
+
+      <div class="form-grid">
+        <label class="full">
+          Tên khách hàng *
+          <input id="name" required maxlength="150" placeholder="Nhập tên khách hàng">
+        </label>
+
+        <label>
+          Ngày chốt
+          <input type="date" id="closeDate">
+        </label>
+
+        <label>
+          Hạn chốt
+          <input type="date" id="deadline">
+        </label>
+
+        <label>
+          Tiến trình
+          <select id="progress">
+            <option>Chưa liên hệ</option>
+            <option>Đã liên hệ</option>
+            <option>Đang tư vấn</option>
+            <option>Đang chốt</option>
+            <option>Thành công</option>
+            <option>Không thành công</option>
+          </select>
+        </label>
+
+        <label>
+          Doanh số (VNĐ)
+          <input type="number" id="revenue" min="0" step="1000" value="0">
+        </label>
+
+        <label>
+          Loại khách
+          <select id="type">
+            <option>Mới</option>
+            <option>Cũ</option>
+            <option>Cũ (Vip)</option>
+          </select>
+        </label>
+
+        <label>
+          Ký hiệu
+          <select id="symbol">
+            <option value="lite">Lite</option>
+            <option value="mess">Messenger</option>
+            <option value="zalo">Zalo</option>
+          </select>
+        </label>
+
+        <label class="full">
+          Giải thích / Ghi chú
+          <textarea id="explanation" rows="3" placeholder="Thông tin thêm..."></textarea>
+        </label>
       </div>
 
-      <button
-        class="icon-btn"
-        id="closeDialogBtn"
-        type="button"
-        aria-label="Đóng"
-      >
-        ×
-      </button>
+      <div class="modal-actions">
+        <button type="button" class="btn light" id="cancelModal">Hủy</button>
+        <button class="btn primary" type="submit">Lưu khách hàng</button>
+      </div>
+    </form><!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>CRM Khách Hàng | Chợ Sale Gia Nghĩa</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">CS</div>
+      <div>
+        <b>CHỢ SALE</b>
+        <small>GIA NGHĨA CRM</small>
+      </div>
     </div>
 
-    <input id="customerId" type="hidden">
+    <p class="side-label">QUẢN LÝ</p>
+    <button class="nav active" data-page="dashboard">▦ <span>Tổng quan</span></button>
+    <button class="nav" data-page="customers">♙ <span>Khách hàng</span></button>
 
-    <div class="form-grid">
-
-      <label>
-        STT
-        <input id="sttInput" type="number" min="1">
-      </label>
-
-      <label>
-        Khách hàng *
-        <input
-          id="nameInput"
-          required
-          placeholder="Nguyễn Văn A"
-        >
-      </label>
-
-      <label>
-        Ngày chốt
-        <input id="closeDateInput" placeholder="31/5">
-      </label>
-
-      <label>
-        Tiến trình
-        <input id="progressInput" placeholder="14/14">
-      </label>
-
-      <label>
-        Hạn chốt
-        <input id="deadlineInput" placeholder="0 hoặc 6/7">
-      </label>
-
-      <label>
-        Doanh số (VNĐ)
-        <input
-          id="valueInput"
-          inputmode="numeric"
-          placeholder="200.000"
-        >
-      </label>
-
-      <label>
-        Loại khách
-        <input
-          id="customerTypeInput"
-          placeholder="Mới, Cũ, Cũ (Vip)"
-        >
-      </label>
-
-      <label>
-        Ký hiệu
-        <input
-          id="symbolInput"
-          placeholder="lite, mess, zalo"
-        >
-      </label>
-
-      <label class="full">
-        Giải thích
-        <textarea
-          id="explanationInput"
-          rows="4"
-          placeholder="Ghi chú về khách hàng..."
-        ></textarea>
-      </label>
-
+    <div class="side-foot">
+      <b>CRM SYSTEM</b>
+      <p>Quản lý khách hàng, tiến trình và doanh số.</p>
+      <span>● Dữ liệu lưu trên thiết bị</span>
     </div>
+  </aside>
 
-    <div class="dialog-actions">
-      <button class="ghost" id="cancelDialogBtn" type="button">
-        Hủy
-      </button>
+  <main class="main">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">HỆ THỐNG QUẢN LÝ</p>
+        <h1>CRM Khách Hàng</h1>
+      </div>
+      <div class="top-actions">
+        <button class="btn light" id="backupBtn">Sao lưu JSON</button>
+        <button class="btn primary" id="addBtn">＋ Thêm khách hàng</button>
+      </div>
+    </header>
 
-      <button class="primary" type="submit">
-        Lưu dữ liệu
-      </button>
-    </div>
+    <!-- TỔNG QUAN -->
+    <section id="dashboard" class="page">
+      <div class="welcome">
+        <div>
+          <p class="eyebrow">CHỢ SALE GIA NGHĨA</p>
+          <h2>Quản lý khách hàng hiệu quả hơn</h2>
+          <p>Theo dõi doanh số, tiến trình và hạn chốt trên một màn hình.</p>
+        </div>
+        <div class="welcome-icon">📊</div>
+      </div>
 
-  </form>
-</dialog>
+      <div class="stats">
+        <article class="stat">
+          <div>Tổng khách hàng <span>♙</span></div>
+          <strong id="statTotal">0</strong>
+          <small>Khách hàng trong hệ thống</small>
+        </article>
 
-<!-- THƯ VIỆN ĐỌC / GHI FILE EXCEL -->
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+        <article class="stat">
+          <div>Khách mới <span>✦</span></div>
+          <strong id="statNew">0</strong>
+          <small>Được phân loại khách mới</small>
+        </article>
 
-<!-- LOGIC ỨNG DỤNG -->
-<script src="app.js"></script>
+        <article class="stat">
+          <div>Tổng doanh số <span>₫</span></div>
+          <strong id="statRevenue">0 ₫</strong>
+          <small>Tổng giá trị đã nhập</small>
+        </article>
 
+        <article class="stat">
+          <div>Hạn chốt cần chú ý <span>◷</span></div>
+          <strong id="statUrgent">0</strong>
+          <small>Hôm nay hoặc đã quá hạn</small>
+        </article>
+      </div>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h3>Khách hàng gần đây</h3>
+            <p>Danh sách cập nhật gần nhất</p>
+          </div>
+          <button class="btn light" id="viewAllBtn">Xem tất cả →</button>
+        </div>
+        <div id="recentList" class="recent-list"></div>
+      </section>
+    </section>
+
+    <!-- DANH SÁCH KHÁCH HÀNG -->
+    <section id="customers" class="page hidden">
+      <div class="page-title">
+        <div>
+          <p class="eyebrow">DỮ LIỆU KINH DOANH</p>
+          <h2>Danh sách khách hàng</h2>
+          <p class="muted">Thêm, chỉnh sửa, nhập và xuất dữ liệu.</p>
+        </div>
+        <button class="btn primary" id="addBtn2">＋ Thêm khách hàng</button>
+      </div>
+
+      <section class="panel">
+        <div class="toolbar">
+          <input
+            id="searchInput"
+            class="search"
+            type="search"
+            placeholder="Tìm tên khách, ghi chú, tiến trình..."
+          >
+
+          <select id="typeFilter">
+            <option value="">Tất cả loại khách</option>
+            <option>Mới</option>
+            <option>Cũ</option>
+            <option>Cũ (Vip)</option>
+          </select>
+
+          <select id="symbolFilter">
+            <option value="">Tất cả ký hiệu</option>
+            <option value="lite">Lite</option>
+            <option value="mess">Messenger</option>
+            <option value="zalo">Zalo</option>
+          </select>
+
+          <button type="button" class="btn primary" id="uploadExcelBtn">
+            📤 Tải file Excel lên
+          </button>
+          <input type="file" id="importFile" accept=".xlsx,.xls,.csv" hidden>
+
+          <button class="btn light" id="exportExcelBtn">Xuất Excel</button>
+          <button class="btn light" id="exportCsvBtn">Xuất CSV</button>
+          <button class="btn light" id="restoreBtn">Khôi phục JSON</button>
+          <input type="file" id="restoreFile" accept=".json" hidden>
+        </div>
+
+        <div class="table-tools">
+          <div>
+            <b>Tất cả khách hàng</b>
+            <span id="resultCount" class="muted">0 khách hàng</span>
+          </div>
+          <div>
+            <button class="btn small light" id="scrollTopBtn">↑ Lên đầu</button>
+            <button class="btn small light" id="scrollBottomBtn">↓ Xuống cuối</button>
+          </div>
+        </div>
+
+        <!-- BẢNG CHÍNH: NGÀY CHỐT VÀ HẠN CHỐT HIỂN THỊ TẠI ĐÂY -->
+        <div class="table-wrap" id="tableWrap" tabindex="0" aria-label="Bảng khách hàng có thể cuộn">
+          <table>
+            <thead>
+              <tr>
+                <th>STT</th>
+                <th>Khách hàng</th>
+                <th>Ngày chốt</th>
+                <th>Tiến trình</th>
+                <th>Hạn chốt</th>
+                <th>Doanh số</th>
+                <th>Loại khách</th>
+                <th>Ký hiệu</th>
+                <th>Giải thích</th>
+                <th>Thao tác</th>
+              </tr>
+            </thead>
+            <tbody id="customerBody"></tbody>
+          </table>
+        </div>
+
+        <div id="emptyState" class="empty hidden">
+          <h3>Chưa có dữ liệu khách hàng</h3>
+          <p>Thêm khách hàng hoặc tải file Excel/CSV lên.</p>
+          <button class="btn primary" id="emptyAddBtn">＋ Thêm khách hàng</button>
+        </div>
+      </section>
+    </section>
+
+    <!-- TRA CỨU RIÊNG NGÀY TỪ EXCEL -->
+    <section id="excelDates" class="excel-date-section">
+      <div class="panel excel-date-panel">
+        <div class="panel-head">
+          <div>
+            <h3>Tra cứu Ngày Chốt và Hạn Chốt từ Excel</h3>
+            <p>Đọc riêng hai cột ngày từ file Excel/CSV, không thay đổi dữ liệu CRM hiện tại.</p>
+          </div>
+        </div>
+
+        <div class="excel-date-controls">
+          <input
+            id="dateExcelFile"
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            aria-label="Chọn file Excel để đọc ngày chốt"
+          >
+          <button type="button" class="btn primary" id="readDateExcelBtn">
+            Đọc dữ liệu ngày
+          </button>
+          <button type="button" class="btn light" id="clearDateExcelBtn">
+            Xóa bảng
+          </button>
+        </div>
+
+        <p id="dateExcelMessage" class="muted" role="status">
+          Chọn file Excel để hiển thị Ngày Chốt và Hạn Chốt.
+        </p>
+
+        <div class="table-wrap excel-date-table-wrap">
+          <table class="excel-date-table">
+            <thead>
+              <tr>
+                <th>STT</th>
+                <th>Khách hàng</th>
+                <th>Ngày Chốt</th>
+                <th>Hạn Chốt</th>
+              </tr>
+            </thead>
+            <tbody id="dateExcelTableBody">
+              <tr>
+                <td colspan="4" class="muted">Chưa có dữ liệu.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      © <span id="year"></span> Chợ Sale Gia Nghĩa
+      <span>CRM nội bộ · V3.5</span>
+    </footer>
+  </main>
+</div>
+
+<!-- FORM THÊM/SỬA KHÁCH HÀNG -->
+<div class="modal-backdrop hidden" id="modalBackdrop">
+  <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <header class="modal-head">
+      <div>
+        <p class="eyebrow">THÔNG TIN KHÁCH HÀNG</p>
+        <h2 id="modalTitle">Thêm khách hàng</h2>
+      </div>
+      <button type="button" class="xbtn" id="closeModal">✕</button>
+    </header>
+
+    <form id="customerForm">
+      <input type="hidden" id="customerId">
+
+      <div class="form-grid">
+        <label class="full">
+          Tên khách hàng *
+          <input id="name" required maxlength="150" placeholder="Nhập tên khách hàng">
+        </label>
+
+        <label>
+          Ngày chốt
+          <input type="date" id="closeDate">
+        </label>
+
+        <label>
+          Hạn chốt
+          <input type="date" id="deadline">
+        </label>
+
+        <label>
+          Tiến trình
+          <select id="progress">
+            <option>Chưa liên hệ</option>
+            <option>Đã liên hệ</option>
+            <option>Đang tư vấn</option>
+            <option>Đang chốt</option>
+            <option>Thành công</option>
+            <option>Không thành công</option>
+          </select>
+        </label>
+
+        <label>
+          Doanh số (VNĐ)
+          <input type="number" id="revenue" min="0" step="1000" value="0">
+        </label>
+
+        <label>
+          Loại khách
+          <select id="type">
+            <option>Mới</option>
+            <option>Cũ</option>
+            <option>Cũ (Vip)</option>
+          </select>
+        </label>
+
+        <label>
+          Ký hiệu
+          <select id="symbol">
+            <option value="lite">Lite</option>
+            <option value="mess">Messenger</option>
+            <option value="zalo">Zalo</option>
+          </select>
+        </label>
+
+        <label class="full">
+          Giải thích / Ghi chú
+          <textarea id="explanation" rows="3" placeholder="Thông tin thêm..."></textarea>
+        </label>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn light" id="cancelModal">Hủy</button>
+        <button class="btn primary" type="submit">Lưu khách hàng</button>
+      </div>
+    </form>
+  </section>
+</div>
+
+<div id="toast" class="toast" role="status"></div>
+</body>
+</html>
+  </section>
+</div>
+
+<div id="toast" class="toast" role="status"></div>
 </body>
 </html>

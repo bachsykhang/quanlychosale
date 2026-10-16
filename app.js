@@ -1,906 +1,659 @@
-
 "use strict";
 
-/* =========================================
-   1. CẤU HÌNH VÀ TRẠNG THÁI
-========================================= */
+const STORAGE_KEY = "choSaleGiaNghiaCRM_v33";
 
-const STORAGE_KEY = "crm_excel_sync_v3";
+let customers = [];
+let toastTimer;
 
-const state = {
-  customers: [],
-  query: "",
-  type: "",
-  symbol: "",
-  deadline: "",
-  fileName: "",
-  syncedAt: ""
+const $ = id => document.getElementById(id);
+
+const todayISO = () => {
+  const d = new Date();
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 10);
 };
 
-const $ = selector => document.querySelector(selector);
-
-const el = {
-  excelFile: $("#excelFile"),
-  syncBtn: $("#syncExcelBtn"),
-  exportBtn: $("#exportBtn"),
-  exportExcelBtn: $("#exportExcelBtn"),
-  addCustomerBtn: $("#addCustomerBtn"),
-  dialog: $("#customerDialog"),
-  form: $("#customerForm"),
-  dialogTitle: $("#dialogTitle"),
-  closeDialogBtn: $("#closeDialogBtn"),
-  cancelDialogBtn: $("#cancelDialogBtn"),
-  rows: $("#customerRows"),
-  empty: $("#emptyState"),
-  total: $("#totalCustomers"),
-  newCustomers: $("#newCustomers"),
-  revenue: $("#expectedRevenue"),
-  follow: $("#needFollowUp"),
-  search: $("#searchInput"),
-  typeFilter: $("#typeFilter"),
-  symbolFilter: $("#symbolFilter"),
-  deadlineFilter: $("#deadlineFilter"),
-  clearFilter: $("#clearFilterBtn"),
-  resultCount: $("#resultCount"),
-  filterIndicator: $("#filterIndicator"),
-  fileInfo: $("#fileInfo"),
-  pipeline: $("#pipelineGrid"),
-  lastUpdated: $("#lastUpdated"),
-  importStatus: $("#importStatus"),
-  sideTotal: $("#sideTotal"),
-  sideUrgent: $("#sideUrgent")
-};
-
-/* =========================================
-   2. HÀM TIỆN ÍCH
-========================================= */
-
-function escapeHTML(value) {
-  return String(value ?? "").replace(/[&<>"']/g, char => ({
+function esc(value) {
+  return String(value ?? "").replace(/[&<>"']/g, c => ({
     "&": "&amp;",
     "<": "&lt;",
     ">": "&gt;",
     '"': "&quot;",
-    "'": "&#039;"
-  })[char]);
+    "'": "&#39;"
+  })[c]);
 }
 
-function createId() {
-  if (window.crypto?.randomUUID) {
-    return crypto.randomUUID();
+function makeId() {
+  return "KH-" +
+    Date.now().toString(36).toUpperCase() +
+    "-" +
+    Math.random().toString(36).slice(2, 6).toUpperCase();
+}
+
+/* CHUẨN HÓA NGÀY */
+
+function dateISO(value) {
+  if (value === 0 || value === "0") {
+    return "0";
   }
 
-  return "customer-" + Date.now() + "-" +
-    Math.random().toString(16).slice(2);
+  if (value === null || value === undefined || value === "") {
+    return "";
+  }
+
+  if (value instanceof Date && !isNaN(value)) {
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+  }
+
+  if (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    typeof XLSX !== "undefined"
+  ) {
+    const parts = XLSX.SSF.parse_date_code(value);
+
+    if (parts && parts.y && parts.m && parts.d) {
+      return `${parts.y}-${String(parts.m).padStart(2, "0")}-${String(parts.d).padStart(2, "0")}`;
+    }
+  }
+
+  const s = String(value).trim();
+
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+
+  if (m) {
+    return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+  }
+
+  m = s.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);
+
+  if (m) {
+    return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+  }
+
+  m = s.match(/^(\d{1,2})[./-](\d{1,2})$/);
+
+  if (m) {
+    return `${new Date().getFullYear()}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`;
+  }
+
+  const d = new Date(s);
+
+  if (isNaN(d)) {
+    return "";
+  }
+
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-function normalizeSearch(value) {
-  return String(value ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
+function dateText(value) {
+  // Giá trị 0 phải giữ nguyên, không chuyển thành ngày.
+  if (value === 0 || value === "0") {
+    return "0";
+  }
+
+  const raw = String(value ?? "").trim();
+
+  if (raw === "0") {
+    return "0";
+  }
+
+  const date = dateISO(value);
+
+  if (date && date !== "0") {
+    const [year, month, day] = date.split("-");
+    return `${day}/${month}/${year}`;
+  }
+
+  return raw || "—";
 }
 
-function formatMoney(value) {
+function money(value) {
   return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
     maximumFractionDigits: 0
-  }).format(Number(value) || 0) + " ₫";
+  }).format(Number(value) || 0);
 }
 
-function parseMoney(value) {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : 0;
+function normalizeType(value) {
+  const s = String(value ?? "").toLowerCase();
+
+  if (s.includes("vip")) {
+    return "Cũ (Vip)";
   }
 
-  return Number(
-    String(value ?? "").replace(/[^\d-]/g, "")
-  ) || 0;
+  if (s === "cũ" || s === "cu" || s.includes("khách cũ")) {
+    return "Cũ";
+  }
+
+  return "Mới";
 }
 
-/* =========================================
-   3. CHUẨN HÓA NGÀY THÁNG
-   Định dạng đầu ra: dd/mm/yyyy
-========================================= */
+function normalizeSymbol(value) {
+  const s = String(value ?? "lite").toLowerCase();
 
-function makeDateText(day, month, year) {
-  const d = Number(day);
-  const m = Number(month);
-  const y = Number(year);
+  if (s.includes("zalo")) return "zalo";
+  if (s.includes("mess")) return "mess";
+  if (s.includes("lite")) return "lite";
 
-  if (
-    !Number.isInteger(d) ||
-    !Number.isInteger(m) ||
-    !Number.isInteger(y) ||
-    y < 1000 ||
-    m < 1 || m > 12 ||
-    d < 1 || d > 31
-  ) {
-    return "";
-  }
-
-  const date = new Date(y, m - 1, d);
-
-  if (
-    date.getFullYear() !== y ||
-    date.getMonth() !== m - 1 ||
-    date.getDate() !== d
-  ) {
-    return "";
-  }
-
-  return [
-    String(d).padStart(2, "0"),
-    String(m).padStart(2, "0"),
-    String(y).padStart(4, "0")
-  ].join("/");
+  return s || "lite";
 }
 
-function formatDateOnly(value) {
-  if (value === null || value === undefined || value === "") {
-    return "";
-  }
-
-  // Đối tượng Date từ JavaScript hoặc Excel.
+function normalizeProgress(value) {
+  // Không cho đối tượng Date hiển thị thành chuỗi ngày tháng.
   if (value instanceof Date) {
-    if (Number.isNaN(value.getTime())) return "";
-
-    return makeDateText(
-      value.getDate(),
-      value.getMonth() + 1,
-      value.getFullYear()
-    );
+    return "Chưa liên hệ";
   }
 
-  const text = String(value).trim();
+  const s = String(value ?? "").trim();
 
-  if (!text) return "";
-
-  // Giữ nguyên dạng ngày/tháng không có năm, ví dụ 6/7.
-  const shortDM = text.match(/^(\d{1,2})\s*\/\s*(\d{1,2})$/);
-
-  if (shortDM) {
-    return `${shortDM[1].padStart(2, "0")}/${shortDM[2].padStart(2, "0")}`;
+  if (!s) {
+    return "Chưa liên hệ";
   }
 
-  // dd/mm/yyyy hoặc dd-mm-yyyy.
-  const vietnamDate = text.match(
-    /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/
+  // Nếu dữ liệu là chuỗi ngày tháng dài thì không dùng làm tiến trình.
+  const looksLikeDate =
+    /^\d{4}-\d{1,2}-\d{1,2}(T.*)?$/.test(s) ||
+    /^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$/.test(s) ||
+    /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s/i.test(s);
+
+  if (looksLikeDate) {
+    return "Chưa liên hệ";
+  }
+
+  // Ngăn số serial ngày Excel bị hiển thị như tiến trình.
+  if (/^\d{5}(\.\d+)?$/.test(s)) {
+    return "Chưa liên hệ";
+  }
+
+  const known = [
+    "Chưa liên hệ",
+    "Đã liên hệ",
+    "Đang tư vấn",
+    "Đang chốt",
+    "Thành công",
+    "Không thành công"
+  ];
+
+  const found = known.find(
+    item => item.toLowerCase() === s.toLowerCase()
   );
 
-  if (vietnamDate) {
-    return makeDateText(
-      vietnamDate[1],
-      vietnamDate[2],
-      vietnamDate[3]
-    ) || text;
-  }
-
-  // yyyy-mm-dd hoặc yyyy-mm-ddTHH:mm:ss...
-  const isoDate = text.match(
-    /^(\d{4})-(\d{1,2})-(\d{1,2})(?:$|T|\s)/
-  );
-
-  if (isoDate) {
-    return makeDateText(
-      isoDate[3],
-      isoDate[2],
-      isoDate[1]
-    ) || text;
-  }
-
-  // Chuỗi kiểu:
-  // Thu Jan 15 2026 23:59:56 GMT+0700 (Giờ Đông Dương)
-  // Chỉ chuẩn hóa khi nhận diện được chuỗi ngày giờ.
-  const looksLikeDateTime =
-    /\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b/i.test(text) ||
-    /\bGMT[+-]\d{4}\b/i.test(text) ||
-    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(text);
-
-  if (looksLikeDateTime) {
-    const date = new Date(text);
-
-    if (!Number.isNaN(date.getTime())) {
-      return makeDateText(
-        date.getDate(),
-        date.getMonth() + 1,
-        date.getFullYear()
-      );
-    }
-  }
-
-  // Không đoán những dữ liệu không xác định được.
-  return text;
+  // Giữ các tiến trình hợp lệ khác, ví dụ 14/14.
+  return found || s;
 }
 
-/* =========================================
-   4. CHUẨN HÓA TIẾN TRÌNH
-   - Nếu là chuỗi ngày giờ: chỉ hiện ngày.
-   - Nếu là chữ bình thường: giữ nguyên.
-========================================= */
+/* CHUẨN HÓA THÔNG TIN KHÁCH HÀNG */
 
-function formatProgress(value) {
-  if (value === null || value === undefined || value === "") {
-    return "";
-  }
+function normalizeCustomer(c = {}) {
+  return {
+    id: String(c.id || c.ID || makeId()),
 
-  const text = String(value).trim();
+    name: String(
+      c.name ??
+      c["Khách Hàng"] ??
+      c["Khách hàng"] ??
+      c["Tên khách hàng"] ??
+      ""
+    ).trim(),
 
-  if (!text) return "";
+    closeDate: dateISO(
+      c.closeDate ??
+      c["Ngày Chốt"] ??
+      c["Ngày chốt"] ??
+      ""
+    ),
 
-  const looksLikeDateTime =
-    /\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b/i.test(text) ||
-    /\bGMT[+-]\d{4}\b/i.test(text) ||
-    /\b(?:Giờ Đông Dương|Indochina Time)\b/i.test(text) ||
-    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(text);
+    progress: normalizeProgress(
+      c.progress ??
+      c["Tiến Trình"] ??
+      c["Tiến trình"] ??
+      ""
+    ),
 
-  if (looksLikeDateTime) {
-    return formatDateOnly(text);
-  }
+    deadline: dateISO(
+      c.deadline ??
+      c["Hạn Chốt"] ??
+      c["Hạn chốt"] ??
+      ""
+    ),
 
-  // Giữ nguyên tiến trình dạng văn bản.
-  return text;
-}
+    revenue: Math.max(
+      0,
+      Number(
+        String(
+          c.revenue ??
+          c["Doanh Số"] ??
+          c["Doanh số"] ??
+          0
+        ).replace(/[,.](?=\d{3}(\D|$))/g, "")
+      ) || 0
+    ),
 
-function dateText() {
-  return formatDateOnly(new Date());
-}
+    type: normalizeType(
+      c.type ??
+      c["Loại Khách"] ??
+      c["Loại khách"] ??
+      ""
+    ),
 
-/* =========================================
-   5. LƯU VÀ KHÔI PHỤC DỮ LIỆU
-========================================= */
+    symbol: normalizeSymbol(
+      c.symbol ??
+      c["Ký Hiệu"] ??
+      c["Ký hiệu"] ??
+      "lite"
+    ),
 
-function saveData() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      customers: state.customers,
-      fileName: state.fileName,
-      syncedAt: state.syncedAt
-    }));
-  } catch (error) {
-    console.error("Lỗi lưu dữ liệu:", error);
-    alert("Không thể lưu dữ liệu. Hãy kiểm tra dung lượng trình duyệt.");
-  }
-}
+    explanation: String(
+      c.explanation ??
+      c["Giải Thích"] ??
+      c["Giải thích"] ??
+      ""
+    ),
 
-function restoreData() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-
-    if (!saved) return;
-
-    state.customers = Array.isArray(saved.customers)
-      ? saved.customers.map(customer => ({
-          ...customer,
-          closeDate: formatDateOnly(customer.closeDate),
-          deadline: formatDateOnly(customer.deadline),
-          progress: formatProgress(customer.progress)
-        }))
-      : [];
-
-    state.fileName = saved.fileName || "";
-    state.syncedAt = formatDateOnly(saved.syncedAt);
-  } catch (error) {
-    console.error("Không đọc được dữ liệu đã lưu:", error);
-    state.customers = [];
-  }
-}
-
-/* =========================================
-   6. TRẠNG THÁI HẠN CHỐT
-========================================= */
-
-function getDeadlineStatus(customer) {
-  const deadline = String(customer.deadline ?? "").trim();
-
-  if (!deadline || deadline === "0" || deadline === "-") {
-    return "zero";
-  }
-
-  let day;
-  let month;
-  let year;
-
-  const fullDate = deadline.match(
-    /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/
-  );
-
-  const shortDate = deadline.match(
-    /^(\d{1,2})\/(\d{1,2})$/
-  );
-
-  if (fullDate) {
-    day = Number(fullDate[1]);
-    month = Number(fullDate[2]);
-    year = Number(fullDate[3]);
-  } else if (shortDate) {
-    day = Number(shortDate[1]);
-    month = Number(shortDate[2]);
-    year = new Date().getFullYear();
-  } else {
-    return "normal";
-  }
-
-  let deadlineDate = new Date(year, month - 1, day, 23, 59, 59);
-
-  if (
-    deadlineDate.getDate() !== day ||
-    deadlineDate.getMonth() !== month - 1
-  ) {
-    return "normal";
-  }
-
-  const now = new Date();
-
-  // Với ngày/tháng không có năm, nếu đã qua lâu thì xét năm sau.
-  if (
-    shortDate &&
-    deadlineDate.getTime() < now.getTime() - 180 * 86400000
-  ) {
-    deadlineDate = new Date(year + 1, month - 1, day, 23, 59, 59);
-  }
-
-  const diff = deadlineDate.getTime() - now.getTime();
-
-  if (diff < 0) return "overdue";
-  if (diff <= 2 * 86400000) return "urgent";
-
-  return "normal";
-}
-
-function deadlineLabel(customer) {
-  const labels = {
-    zero: ["Không hạn", "tag-zero"],
-    normal: ["Có hạn", "tag-normal"],
-    urgent: ["Khẩn cấp", "tag-urgent"],
-    overdue: ["Quá hạn", "tag-overdue"]
+    createdAt: c.createdAt || new Date().toISOString(),
+    updatedAt: c.updatedAt || ""
   };
-
-  return labels[getDeadlineStatus(customer)];
 }
 
-function isNewCustomer(customer) {
-  return normalizeSearch(customer.customerType).includes("moi");
+/* THÔNG BÁO */
+
+function toast(message) {
+  $("toast").textContent = message;
+  $("toast").classList.add("show");
+
+  clearTimeout(toastTimer);
+
+  toastTimer = setTimeout(() => {
+    $("toast").classList.remove("show");
+  }, 3200);
 }
 
-/* =========================================
-   7. LỌC KHÁCH HÀNG
-========================================= */
+/* LƯU VÀ ĐỌC DỮ LIỆU */
 
-function getFilteredCustomers() {
-  return state.customers.filter(customer => {
-    const searchable = normalizeSearch([
-      customer.name,
-      customer.customerType,
-      customer.symbol,
-      customer.explanation,
-      customer.progress,
-      customer.closeDate,
-      customer.deadline
-    ].join(" "));
+function save() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(customers));
+  } catch (error) {
+    console.error(error);
+    toast("Không thể lưu dữ liệu trên trình duyệt.");
+  }
+}
 
-    if (state.query && !searchable.includes(state.query)) {
-      return false;
-    }
+function load() {
+  try {
+    const value = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
 
-    if (state.type && customer.customerType !== state.type) {
-      return false;
-    }
+    customers = Array.isArray(value)
+      ? value.map(normalizeCustomer)
+      : [];
+  } catch (error) {
+    customers = [];
+    toast("Không đọc được dữ liệu đã lưu.");
+  }
+}
 
-    if (state.symbol && customer.symbol !== state.symbol) {
-      return false;
-    }
+/* ĐIỀU HƯỚNG */
 
-    if (
-      state.deadline &&
-      getDeadlineStatus(customer) !== state.deadline
-    ) {
-      return false;
-    }
+function page(id) {
+  document.querySelectorAll(".page").forEach(element => {
+    element.classList.toggle("hidden", element.id !== id);
+  });
 
-    return true;
+  document.querySelectorAll(".nav").forEach(element => {
+    element.classList.toggle("active", element.dataset.page === id);
   });
 }
 
-/* =========================================
-   8. HIỂN THỊ GIAO DIỆN
-========================================= */
+/* TÌM KIẾM VÀ LỌC */
 
-function render() {
-  renderFilters();
-  renderMetrics();
-  renderRows();
-  renderPipeline();
-  renderSummary();
-  syncQuickButtons();
-}
+function filtered() {
+  const q = $("searchInput").value.trim().toLowerCase();
+  const type = $("typeFilter").value;
+  const symbol = $("symbolFilter").value;
 
-function renderFilters() {
-  const types = [...new Set(
-    state.customers.map(c => c.customerType).filter(Boolean)
-  )].sort();
-
-  const symbols = [...new Set(
-    state.customers.map(c => c.symbol).filter(Boolean)
-  )].sort();
-
-  const previousType = state.type;
-  const previousSymbol = state.symbol;
-
-  el.typeFilter.innerHTML =
-    '<option value="">Tất cả loại khách</option>' +
-    types.map(type =>
-      `<option value="${escapeHTML(type)}">${escapeHTML(type)}</option>`
-    ).join("");
-
-  el.symbolFilter.innerHTML =
-    '<option value="">Tất cả ký hiệu</option>' +
-    symbols.map(symbol =>
-      `<option value="${escapeHTML(symbol)}">${escapeHTML(symbol)}</option>`
-    ).join("");
-
-  el.typeFilter.value = types.includes(previousType) ? previousType : "";
-  el.symbolFilter.value = symbols.includes(previousSymbol)
-    ? previousSymbol
-    : "";
-
-  state.type = el.typeFilter.value;
-  state.symbol = el.symbolFilter.value;
-}
-
-function renderMetrics() {
-  const customers = state.customers;
-
-  const revenue = customers.reduce(
-    (sum, c) => sum + (Number(c.value) || 0),
-    0
+  return customers.filter(c =>
+    (
+      !q ||
+      [
+        c.name,
+        c.explanation,
+        c.progress,
+        c.type,
+        c.symbol
+      ].join(" ").toLowerCase().includes(q)
+    ) &&
+    (!type || c.type === type) &&
+    (!symbol || c.symbol === symbol)
   );
-
-  const followCount = customers.filter(c => {
-    const status = getDeadlineStatus(c);
-    return status === "urgent" || status === "overdue";
-  }).length;
-
-  el.total.textContent = customers.length;
-  el.newCustomers.textContent = customers.filter(isNewCustomer).length;
-  el.revenue.textContent = formatMoney(revenue);
-  el.follow.textContent = followCount;
-
-  el.sideTotal.textContent = customers.length;
-  el.sideUrgent.textContent = followCount;
 }
 
-function renderRows() {
-  const customers = getFilteredCustomers();
+/* THỐNG KÊ */
 
-  el.rows.innerHTML = customers.map(customer => {
-    const [deadlineText, deadlineClass] = deadlineLabel(customer);
+function renderStats() {
+  const today = todayISO();
 
-    const typeClass = normalizeSearch(customer.customerType).includes("vip")
-      ? "tag-vip"
-      : isNewCustomer(customer)
-        ? "tag-new"
-        : "";
+  $("statTotal").textContent =
+    customers.length.toLocaleString("vi-VN");
+
+  $("statNew").textContent =
+    customers.filter(c => c.type === "Mới")
+      .length.toLocaleString("vi-VN");
+
+  $("statRevenue").textContent =
+    money(customers.reduce((sum, c) => sum + c.revenue, 0));
+
+  $("statUrgent").textContent =
+    customers.filter(c =>
+      c.deadline &&
+      c.deadline <= today &&
+      !["Thành công", "Không thành công"].includes(c.progress)
+    ).length.toLocaleString("vi-VN");
+
+  $("year").textContent = new Date().getFullYear();
+}
+
+function typeClass(type) {
+  return type === "Cũ (Vip)"
+    ? "type-vip"
+    : type === "Cũ"
+      ? "type-old"
+      : "type-new";
+}
+
+function progressClass(progress) {
+  return progress === "Thành công"
+    ? "progress-success"
+    : progress === "Không thành công"
+      ? "progress-failed"
+      : "progress-normal";
+}
+
+/* HIỂN THỊ BẢNG TẤT CẢ KHÁCH HÀNG
+   Ngày chốt và Hạn chốt được hiển thị trực tiếp tại đây. */
+
+function renderTable() {
+  const list = filtered();
+  const today = todayISO();
+
+  $("resultCount").textContent = `${list.length} khách hàng`;
+
+  $("tableWrap").classList.toggle("hidden", !list.length);
+  $("emptyState").classList.toggle("hidden", !!list.length);
+
+  $("customerBody").innerHTML = list.map((c, i) => {
+    const urgent =
+      c.deadline &&
+      c.deadline <= today &&
+      !["Thành công", "Không thành công"].includes(c.progress);
 
     return `
       <tr>
-        <td>${escapeHTML(customer.stt)}</td>
+        <td>${i + 1}</td>
 
-        <td>
-          <div class="customer-name">
-            ${escapeHTML(customer.name)}
-          </div>
+        <td class="customer-name">
+          ${esc(c.name || "Chưa đặt tên")}
         </td>
 
-        <td>
-          ${escapeHTML(formatDateOnly(customer.closeDate) || "—")}
-        </td>
+        <td>${dateText(c.closeDate)}</td>
 
         <td>
-          ${escapeHTML(formatProgress(customer.progress) || "—")}
-        </td>
-
-        <td>
-          <span class="tag ${deadlineClass}">
-            ${escapeHTML(formatDateOnly(customer.deadline) || "Không hạn")}
-            · ${escapeHTML(deadlineText)}
+          <span class="pill ${progressClass(c.progress)}">
+            ${esc(c.progress)}
           </span>
         </td>
 
-        <td>
-          <span class="amount">${formatMoney(customer.value)}</span>
+        <td class="${urgent ? "urgent" : ""}">
+          ${dateText(c.deadline)}${urgent ? "" : ""}
         </td>
 
+        <td class="money">${money(c.revenue)}</td>
+
         <td>
-          <span class="tag ${typeClass}">
-            ${escapeHTML(customer.customerType || "Chưa phân loại")}
+          <span class="pill ${typeClass(c.type)}">
+            ${esc(c.type)}
           </span>
         </td>
 
-        <td>${escapeHTML(customer.symbol || "—")}</td>
+        <td>${esc(c.symbol)}</td>
 
-        <td>
-          <div class="customer-note">
-            ${escapeHTML(customer.explanation || "—")}
-          </div>
-        </td>
+        <td>${esc(c.explanation || "—")}</td>
 
         <td>
           <div class="row-actions">
             <button
+              class="action"
               data-action="receipt"
-              data-id="${escapeHTML(customer.id)}"
-              class="receipt-btn"
-              type="button"
+              data-id="${esc(c.id)}"
             >Biên lai</button>
 
             <button
+              class="action"
               data-action="edit"
-              data-id="${escapeHTML(customer.id)}"
-              type="button"
+              data-id="${esc(c.id)}"
             >Sửa</button>
 
             <button
+              class="action delete"
               data-action="delete"
-              data-id="${escapeHTML(customer.id)}"
-              class="delete-btn"
-              type="button"
+              data-id="${esc(c.id)}"
             >Xóa</button>
           </div>
         </td>
       </tr>
     `;
   }).join("");
-
-  el.empty.classList.toggle("show", customers.length === 0);
 }
 
-function renderPipeline() {
-  const groups = {};
+/* KHÁCH HÀNG GẦN ĐÂY */
 
-  state.customers.forEach(customer => {
-    const type = customer.customerType || "Chưa phân loại";
+function renderRecent() {
+  const list = [...customers]
+    .sort((a, b) =>
+      (b.updatedAt || b.createdAt)
+        .localeCompare(a.updatedAt || a.createdAt)
+    )
+    .slice(0, 5);
 
-    if (!groups[type]) {
-      groups[type] = { count: 0, revenue: 0 };
-    }
-
-    groups[type].count++;
-    groups[type].revenue += Number(customer.value) || 0;
-  });
-
-  const entries = Object.entries(groups);
-
-  if (!entries.length) {
-    el.pipeline.innerHTML = `
-      <div class="pipeline-card">
-        <span>Chưa có dữ liệu</span>
-        <strong>0</strong>
-        <small>Thêm khách hàng hoặc nhập Excel.</small>
+  $("recentList").innerHTML = list.length
+    ? list.map(c => `
+      <div class="recent-item">
+        <div>
+          <div class="recent-name">${esc(c.name)}</div>
+          <div class="recent-meta">
+            ${esc(c.type)} · ${esc(c.progress)}
+          </div>
+        </div>
+        <div class="recent-revenue">${money(c.revenue)}</div>
+      </div>
+    `).join("")
+    : `
+      <div class="empty">
+        <h3>Chưa có khách hàng</h3>
+        <p>Thêm khách hàng hoặc tải file Excel lên để bắt đầu.</p>
       </div>
     `;
-    return;
-  }
-
-  el.pipeline.innerHTML = entries.map(([type, data]) => `
-    <article class="pipeline-card">
-      <span>${escapeHTML(type)}</span>
-      <strong>${data.count} khách</strong>
-      <small>Doanh số: ${formatMoney(data.revenue)}</small>
-    </article>
-  `).join("");
 }
 
-function renderSummary() {
-  const customers = getFilteredCustomers();
-
-  el.resultCount.textContent = `${customers.length} khách hàng`;
-
-  const hasFilters =
-    state.query || state.type || state.symbol || state.deadline;
-
-  el.filterIndicator.textContent = hasFilters
-    ? "Đang áp dụng bộ lọc"
-    : "Đang hiển thị tất cả";
-
-  el.fileInfo.textContent = state.fileName
-    ? `File: ${state.fileName}`
-    : "Chưa đồng bộ Excel.";
-
-  el.lastUpdated.textContent = state.syncedAt
-    ? `Cập nhật: ${formatDateOnly(state.syncedAt)}`
-    : "Chưa cập nhật";
+function render() {
+  renderStats();
+  renderTable();
+  renderRecent();
 }
 
-function syncQuickButtons() {
-  document.querySelectorAll(".quick-btn").forEach(button => {
-    button.classList.toggle(
-      "active",
-      button.dataset.deadline === state.deadline
-    );
+/* FORM THÊM VÀ SỬA */
+
+function openModal(c = null) {
+  $("customerForm").reset();
+
+  $("customerId").value = c?.id || "";
+  $("modalTitle").textContent = c ? "Sửa khách hàng" : "Thêm khách hàng";
+
+  $("name").value = c?.name || "";
+  $("closeDate").value = c?.closeDate || todayISO();
+  $("deadline").value = c?.deadline || "";
+  $("progress").value = c?.progress || "Chưa liên hệ";
+  $("revenue").value = c?.revenue ?? 0;
+  $("type").value = c?.type || "Mới";
+  $("symbol").value = c?.symbol || "lite";
+  $("explanation").value = c?.explanation || "";
+
+  $("modalBackdrop").classList.remove("hidden");
+  $("name").focus();
+}
+
+function closeModal() {
+  $("modalBackdrop").classList.add("hidden");
+}
+
+function bindForm() {
+  $("addBtn").onclick = () => openModal();
+  $("addBtn2").onclick = () => openModal();
+  $("emptyAddBtn").onclick = () => openModal();
+
+  $("closeModal").onclick = closeModal;
+  $("cancelModal").onclick = closeModal;
+
+  $("modalBackdrop").addEventListener("click", event => {
+    if (event.target === $("modalBackdrop")) {
+      closeModal();
+    }
+  });
+
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape") closeModal();
+  });
+
+  $("customerForm").addEventListener("submit", event => {
+    event.preventDefault();
+
+    const name = $("name").value.trim();
+
+    if (!name) {
+      toast("Vui lòng nhập tên khách hàng.");
+      return;
+    }
+
+    const id = $("customerId").value;
+    const old = customers.find(c => c.id === id);
+
+    const customer = normalizeCustomer({
+      id: id || makeId(),
+      name,
+      closeDate: $("closeDate").value,
+      deadline: $("deadline").value,
+      progress: $("progress").value,
+      revenue: $("revenue").value,
+      type: $("type").value,
+      symbol: $("symbol").value,
+      explanation: $("explanation").value.trim(),
+      createdAt: old?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+
+    if (old) {
+      customers = customers.map(c => c.id === id ? customer : c);
+      toast("Đã cập nhật khách hàng.");
+    } else {
+      customers.unshift(customer);
+      toast("Đã thêm khách hàng.");
+    }
+
+    save();
+    render();
+    closeModal();
   });
 }
 
-/* =========================================
-   9. THÊM / SỬA KHÁCH HÀNG
-========================================= */
+/* THAO TÁC BẢNG */
 
-function openCustomerForm(customer = null) {
-  el.form.reset();
+function bindTable() {
+  document.querySelectorAll(".nav").forEach(button => {
+    button.addEventListener("click", () => page(button.dataset.page));
+  });
 
-  el.dialogTitle.textContent = customer
-    ? "Chỉnh sửa khách hàng"
-    : "Thêm dữ liệu";
+  $("viewAllBtn").onclick = () => page("customers");
 
-  $("#customerId").value = customer?.id || "";
-  $("#sttInput").value = customer?.stt ?? (state.customers.length + 1);
-  $("#nameInput").value = customer?.name || "";
-  $("#closeDateInput").value = formatDateOnly(customer?.closeDate);
-  $("#progressInput").value = formatProgress(customer?.progress);
-  $("#deadlineInput").value = formatDateOnly(customer?.deadline);
-  $("#valueInput").value = customer?.value ?? "";
-  $("#customerTypeInput").value = customer?.customerType || "";
-  $("#symbolInput").value = customer?.symbol || "";
-  $("#explanationInput").value = customer?.explanation || "";
+  ["searchInput", "typeFilter", "symbolFilter"].forEach(id => {
+    $(id).addEventListener("input", renderTable);
+    $(id).addEventListener("change", renderTable);
+  });
 
-  if (!el.dialog.open) {
-    el.dialog.showModal();
-  }
-}
-
-function closeDialog() {
-  if (el.dialog.open) {
-    el.dialog.close();
-  }
-}
-
-function saveCustomer(event) {
-  event.preventDefault();
-
-  const id = $("#customerId").value || createId();
-
-  const customer = {
-    id,
-    stt: Number($("#sttInput").value) || (state.customers.length + 1),
-    name: $("#nameInput").value.trim(),
-    closeDate: formatDateOnly($("#closeDateInput").value),
-    progress: formatProgress($("#progressInput").value),
-    deadline: formatDateOnly($("#deadlineInput").value),
-    value: parseMoney($("#valueInput").value),
-    customerType: $("#customerTypeInput").value.trim(),
-    symbol: $("#symbolInput").value.trim(),
-    explanation: $("#explanationInput").value.trim()
+  $("scrollTopBtn").onclick = () => {
+    $("tableWrap").scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  if (!customer.name) {
-    alert("Vui lòng nhập tên khách hàng.");
-    return;
-  }
-
-  const index = state.customers.findIndex(c => c.id === id);
-
-  if (index >= 0) {
-    state.customers[index] = customer;
-  } else {
-    state.customers.push(customer);
-  }
-
-  saveData();
-  closeDialog();
-  render();
-}
-
-/* =========================================
-   10. SỬA / XÓA / XUẤT BIÊN LAI
-========================================= */
-
-function handleRowAction(event) {
-  const button = event.target.closest("button[data-action]");
-
-  if (!button) return;
-
-  const { action, id } = button.dataset;
-  const customer = state.customers.find(c => c.id === id);
-
-  if (!customer) return;
-
-  if (action === "edit") {
-    openCustomerForm(customer);
-    return;
-  }
-
-  if (action === "receipt") {
-    exportReceipt(id);
-    return;
-  }
-
-  if (action === "delete") {
-    if (!confirm(`Bạn có chắc muốn xóa khách hàng "${customer.name}" không?`)) {
-      return;
-    }
-
-    state.customers = state.customers.filter(c => c.id !== id);
-
-    saveData();
-    render();
-  }
-}
-
-/* =========================================
-   11. NHẬP EXCEL / CSV
-========================================= */
-
-function normalizeHeader(value) {
-  return normalizeSearch(value).replace(/[^a-z0-9]/g, "");
-}
-
-function findValue(row, aliases) {
-  const keys = Object.keys(row);
-
-  for (const alias of aliases) {
-    const normalizedAlias = normalizeHeader(alias);
-
-    const found = keys.find(key =>
-      normalizeHeader(key) === normalizedAlias
-    );
-
-    if (found !== undefined) return row[found];
-  }
-
-  return "";
-}
-
-function normalizeImportedDate(value) {
-  if (value === null || value === undefined || value === "") {
-    return "";
-  }
-
-  return formatDateOnly(value);
-}
-
-function normalizeCustomer(row, index) {
-  return {
-    id: createId(),
-
-    stt: Number(findValue(row, [
-      "STT", "Số thứ tự"
-    ])) || index + 1,
-
-    name: String(findValue(row, [
-      "Khách Hàng", "Khách hàng", "Tên khách hàng", "Tên"
-    ]) ?? "").trim(),
-
-    closeDate: normalizeImportedDate(findValue(row, [
-      "Ngày Chốt", "Ngày chốt", "Ngày"
-    ])),
-
-    // Quan trọng: chuẩn hóa cả cột Tiến trình khi nhập Excel.
-    progress: formatProgress(findValue(row, [
-      "Tiến Trình", "Tiến trình", "Tiến độ"
-    ])),
-
-    deadline: normalizeImportedDate(findValue(row, [
-      "Hạn Chốt", "Hạn chốt", "Deadline"
-    ])),
-
-    value: parseMoney(findValue(row, [
-      "Doanh Số", "Doanh số", "Giá trị", "Số tiền"
-    ])),
-
-    customerType: String(findValue(row, [
-      "Loại Khách", "Loại khách", "Phân loại"
-    ]) ?? "").trim(),
-
-    symbol: String(findValue(row, [
-      "Ký Hiệu", "Ký hiệu", "Nền tảng"
-    ]) ?? "").trim(),
-
-    explanation: String(findValue(row, [
-      "Giải Thích", "Giải thích", "Ghi chú", "Ghi chu"
-    ]) ?? "").trim()
+  $("scrollBottomBtn").onclick = () => {
+    $("tableWrap").scrollTo({
+      top: $("tableWrap").scrollHeight,
+      behavior: "smooth"
+    });
   };
+
+  $("customerBody").addEventListener("click", event => {
+    const button = event.target.closest("[data-action]");
+
+    if (!button) return;
+
+    const customer = customers.find(c => c.id === button.dataset.id);
+
+    if (!customer) return;
+
+    if (button.dataset.action === "edit") {
+      openModal(customer);
+    }
+
+    if (
+      button.dataset.action === "delete" &&
+      confirm(`Xóa khách hàng "${customer.name}"?`)
+    ) {
+      customers = customers.filter(c => c.id !== customer.id);
+      save();
+      render();
+      toast("Đã xóa khách hàng.");
+    }
+
+    if (button.dataset.action === "receipt") {
+      printReceipt(customer);
+    }
+  });
 }
 
-async function syncFromExcelFile() {
-  const file = el.excelFile.files[0];
+/* XUẤT DỮ LIỆU */
 
-  if (!file) {
-    alert("Vui lòng chọn file Excel hoặc CSV trước.");
-    return;
-  }
-
-  if (typeof XLSX === "undefined") {
-    alert("Không tải được thư viện Excel. Hãy kiểm tra kết nối Internet.");
-    return;
-  }
-
-  try {
-    el.importStatus.textContent = "Đang đọc dữ liệu...";
-
-    const buffer = await file.arrayBuffer();
-
-    const workbook = XLSX.read(buffer, {
-      type: "array",
-      cellDates: true
-    });
-
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-
-    const rows = XLSX.utils.sheet_to_json(sheet, {
-      defval: "",
-      raw: true
-    });
-
-    if (!rows.length) {
-      alert("File không có dữ liệu hoặc không tìm thấy dòng tiêu đề.");
-      el.importStatus.textContent = "Không có dữ liệu để nhập.";
-      return;
-    }
-
-    const imported = rows
-      .map(normalizeCustomer)
-      .filter(customer => customer.name);
-
-    if (!imported.length) {
-      alert("Không tìm thấy cột tên khách hàng phù hợp.");
-      el.importStatus.textContent = "Không nhận diện được dữ liệu.";
-      return;
-    }
-
-    const replace = confirm(
-      `Đã đọc ${imported.length} khách hàng.\n\n` +
-      "Nhấn OK để thay thế danh sách hiện tại.\n" +
-      "Nhấn Cancel để giữ dữ liệu cũ và thêm khách mới."
-    );
-
-    if (replace) {
-      state.customers = imported;
-    } else {
-      state.customers.push(...imported);
-    }
-
-    state.fileName = file.name;
-    state.syncedAt = dateText();
-
-    saveData();
-    render();
-
-    el.importStatus.textContent =
-      `Đã nhập ${imported.length} khách hàng thành công.`;
-  } catch (error) {
-    console.error("Lỗi nhập Excel:", error);
-    alert("Không thể đọc file. Hãy kiểm tra định dạng Excel/CSV.");
-    el.importStatus.textContent = "Nhập file thất bại.";
-  }
+function rowsForExport() {
+  return customers.map((c, i) => ({
+    "STT": i + 1,
+    "Khách Hàng": c.name,
+    "Ngày Chốt": c.closeDate,
+    "Tiến Trình": c.progress,
+    "Hạn Chốt": c.deadline,
+    "Doanh Số": c.revenue,
+    "Loại Khách": c.type,
+    "Ký Hiệu": c.symbol,
+    "Giải Thích": c.explanation
+  }));
 }
 
-/* =========================================
-   12. XUẤT FILE CSV / EXCEL
-========================================= */
-
-function downloadBlob(blob, fileName) {
+function download(blob, name) {
   const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
+  const a = document.createElement("a");
 
-  link.href = url;
-  link.download = fileName;
+  a.href = url;
+  a.download = name;
 
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
 
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  setTimeout(() => URL.revokeObjectURL(url), 1200);
 }
 
-function exportCsv() {
-  const customers = getFilteredCustomers();
+function exportCSV() {
+  const rows = rowsForExport();
 
-  if (!customers.length) {
-    alert("Không có dữ liệu để xuất.");
-    return;
-  }
-
-  const headers = [
+  const heads = [
     "STT",
     "Khách Hàng",
     "Ngày Chốt",
@@ -912,583 +665,969 @@ function exportCsv() {
     "Giải Thích"
   ];
 
-  const rows = customers.map(c => [
-    c.stt,
-    c.name,
-    formatDateOnly(c.closeDate),
-    formatProgress(c.progress),
-    formatDateOnly(c.deadline),
-    c.value,
-    c.customerType,
-    c.symbol,
-    c.explanation
-  ]);
+  const quote = value => {
+    let s = String(value ?? "");
 
-  const csvCell = value =>
-    '"' + String(value ?? "").replace(/"/g, '""') + '"';
+    if (/^[=+@-]/.test(s)) {
+      s = "'" + s;
+    }
 
-  const csv = "\uFEFF" + [
-    headers,
-    ...rows
-  ].map(row => row.map(csvCell).join(",")).join("\r\n");
+    return '"' + s.replace(/"/g, '""') + '"';
+  };
 
-  downloadBlob(
-    new Blob([csv], { type: "text/csv;charset=utf-8;" }),
-    "CRM_Khach_Hang.csv"
+  const csv = [
+    heads.map(quote).join(","),
+    ...rows.map(row => heads.map(h => quote(row[h])).join(","))
+  ].join("\r\n");
+
+  download(
+    new Blob(["\ufeff" + csv], {
+      type: "text/csv;charset=utf-8"
+    }),
+    `Cho_Sale_${todayISO()}.csv`
   );
+
+  toast("Đã xuất CSV.");
 }
 
 function exportExcel() {
-  const customers = getFilteredCustomers();
-
-  if (!customers.length) {
-    alert("Không có dữ liệu để xuất.");
-    return;
-  }
-
   if (typeof XLSX === "undefined") {
-    alert("Không tải được thư viện Excel. Hãy kiểm tra Internet.");
+    toast("Không tải được thư viện Excel. Hãy kiểm tra Internet.");
     return;
   }
 
-  const rows = customers.map(c => ({
-    "STT": c.stt,
-    "Khách Hàng": c.name,
-    "Ngày Chốt": formatDateOnly(c.closeDate),
-    "Tiến Trình": formatProgress(c.progress),
-    "Hạn Chốt": formatDateOnly(c.deadline),
-    "Doanh Số": c.value,
-    "Loại Khách": c.customerType,
-    "Ký Hiệu": c.symbol,
-    "Giải Thích": c.explanation
-  }));
+  const ws = XLSX.utils.json_to_sheet(rowsForExport());
 
-  const worksheet = XLSX.utils.json_to_sheet(rows);
-  const workbook = XLSX.utils.book_new();
-
-  worksheet["!cols"] = [
-    { wch: 8 },
-    { wch: 25 },
+  ws["!cols"] = [
+    { wch: 6 },
+    { wch: 24 },
     { wch: 15 },
-    { wch: 20 },
+    { wch: 22 },
     { wch: 15 },
     { wch: 18 },
-    { wch: 18 },
     { wch: 15 },
-    { wch: 35 }
+    { wch: 14 },
+    { wch: 40 }
   ];
 
-  XLSX.utils.book_append_sheet(workbook, worksheet, "KhachHang");
-  XLSX.writeFile(workbook, "CRM_Khach_Hang.xlsx");
+  const wb = XLSX.utils.book_new();
+
+  XLSX.utils.book_append_sheet(wb, ws, "KhachHang");
+
+  XLSX.writeFile(wb, `Cho_Sale_${todayISO()}.xlsx`);
+
+  toast("Đã xuất Excel.");
 }
 
-/* =========================================
-   13. ĐỌC SỐ TIỀN THÀNH CHỮ
-========================================= */
+/* NHẬN DIỆN TIÊU ĐỀ EXCEL */
 
-function numberToVietnameseWords(number) {
-  number = Math.floor(Math.abs(Number(number) || 0));
-
-  if (number === 0) return "Không đồng";
-
-  const digits = [
-    "không", "một", "hai", "ba", "bốn",
-    "năm", "sáu", "bảy", "tám", "chín"
-  ];
-
-  const units = [
-    "", "nghìn", "triệu", "tỷ",
-    "nghìn tỷ", "triệu tỷ"
-  ];
-
-  function readThreeDigits(n, full) {
-    const hundred = Math.floor(n / 100);
-    const ten = Math.floor((n % 100) / 10);
-    const unit = n % 10;
-    const words = [];
-
-    if (hundred > 0 || full) {
-      words.push(digits[hundred], "trăm");
-    }
-
-    if (ten > 1) {
-      words.push(digits[ten], "mươi");
-
-      if (unit === 1) words.push("mốt");
-      else if (unit === 5) words.push("lăm");
-      else if (unit > 0) words.push(digits[unit]);
-    } else if (ten === 1) {
-      words.push("mười");
-
-      if (unit === 5) words.push("lăm");
-      else if (unit > 0) words.push(digits[unit]);
-    } else if (unit > 0) {
-      if (hundred > 0 || full) words.push("lẻ");
-      words.push(digits[unit]);
-    }
-
-    return words.join(" ");
-  }
-
-  const groups = [];
-  let remaining = number;
-  let index = 0;
-
-  while (remaining > 0) {
-    const group = remaining % 1000;
-
-    if (group > 0) {
-      groups.unshift({
-        value: group,
-        unit: units[index] || ""
-      });
-    }
-
-    remaining = Math.floor(remaining / 1000);
-    index++;
-  }
-
-  const words = groups.map((group, i) => {
-    const full = i > 0 && group.value < 100;
-    const text = readThreeDigits(group.value, full);
-
-    return [text, group.unit].filter(Boolean).join(" ");
-  });
-
-  let result = words.join(" ").replace(/\s+/g, " ").trim();
-
-  result = result.charAt(0).toUpperCase() + result.slice(1);
-
-  return result + " đồng";
+function normalizeHeader(value) {
+  return String(value ?? "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[đĐ]/g, "d")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
 }
 
-/* =========================================
-   14. XUẤT BIÊN LAI
-========================================= */
+function headerValue(row, aliases) {
+  const wanted = new Set(aliases.map(normalizeHeader));
 
-function exportReceipt(customerId) {
-  const customer = state.customers.find(c => c.id === customerId);
-
-  if (!customer) {
-    alert("Không tìm thấy khách hàng.");
-    return;
-  }
-
-  const amount = Number(customer.value) || 0;
-  const now = new Date();
-
-  const receiptNumber =
-    "CSGN-" +
-    now.getFullYear() +
-    String(now.getMonth() + 1).padStart(2, "0") +
-    String(now.getDate()).padStart(2, "0") +
-    "-" +
-    String(customer.stt || 1).padStart(4, "0");
-
-  const receiptWindow = window.open(
-    "",
-    "_blank",
-    "width=900,height=850"
+  const key = Object.keys(row).find(k =>
+    wanted.has(normalizeHeader(k))
   );
 
-  if (!receiptWindow) {
-    alert("Trình duyệt đã chặn cửa sổ biên lai. Hãy cho phép cửa sổ bật lên.");
+  return key === undefined ? "" : row[key];
+}
+
+function findHeaderRow(rows) {
+  for (let i = 0; i < Math.min(rows.length, 30); i++) {
+    const headers = (rows[i] || []).map(normalizeHeader);
+
+    const hasName = headers.some(h =>
+      ["khachhang", "tenkhachhang", "ten", "hoten"].includes(h)
+    );
+
+    const hasClose = headers.some(h =>
+      [
+        "ngaychot",
+        "ngaychotkh",
+        "ngaychotkhachhang",
+        "chotngay",
+        "closedate"
+      ].includes(h)
+    );
+
+    const hasDeadline = headers.some(h =>
+      [
+        "hanchot",
+        "hanchotkh",
+        "hanchotkhachhang",
+        "deadline",
+        "ngayhethan"
+      ].includes(h)
+    );
+
+    if (hasName && (hasClose || hasDeadline)) {
+      return i;
+    }
+  }
+
+  return 0;
+}
+
+/* NHẬP EXCEL
+   Đọc Ngày Chốt và Hạn Chốt vào từng khách hàng. */
+
+function importExcel(file) {
+  if (typeof XLSX === "undefined") {
+    toast("Không tải được thư viện Excel. Hãy kiểm tra Internet.");
     return;
   }
 
-  const receiptHTML = `
-<!doctype html>
+  const reader = new FileReader();
+
+  reader.onload = event => {
+    try {
+      const wb = XLSX.read(event.target.result, {
+        type: "array",
+        cellDates: true
+      });
+
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+
+      if (!sheet) {
+        throw Error("Không tìm thấy sheet");
+      }
+
+      const rows = XLSX.utils.sheet_to_json(sheet, {
+        header: 1,
+        defval: "",
+        raw: true,
+        blankrows: false
+      });
+
+      if (!rows.length) {
+        throw Error("File không có dữ liệu.");
+      }
+
+      const headerIndex = findHeaderRow(rows);
+      const headers = rows[headerIndex] || [];
+
+      const source = rows.slice(headerIndex + 1).map(row => {
+        const obj = {};
+
+        headers.forEach((header, i) => {
+          if (String(header ?? "").trim()) {
+            obj[String(header).trim()] = row[i] ?? "";
+          }
+        });
+
+        return obj;
+      });
+
+      const imported = source.map(row => normalizeCustomer({
+        id: headerValue(row, [
+          "ID",
+          "Mã khách hàng",
+          "Mã KH"
+        ]) || makeId(),
+
+        name: headerValue(row, [
+          "Khách Hàng",
+          "Khách hàng",
+          "Tên khách hàng",
+          "Tên KH",
+          "Họ tên",
+          "Tên"
+        ]),
+
+        closeDate: headerValue(row, [
+          "Ngày Chốt",
+          "Ngày chốt KH",
+          "Ngày chốt khách hàng",
+          "Chốt ngày",
+          "Close date"
+        ]),
+
+        progress: headerValue(row, [
+          "Tiến Trình",
+          "Tiến trình",
+          "Trạng thái",
+          "Tiến độ"
+        ]),
+
+        deadline: headerValue(row, [
+          "Hạn Chốt",
+          "Hạn chốt KH",
+          "Hạn chốt khách hàng",
+          "Deadline",
+          "Ngày hết hạn"
+        ]),
+
+        revenue: headerValue(row, [
+          "Doanh Số",
+          "Doanh số",
+          "Doanh thu",
+          "Giá trị"
+        ]),
+
+        type: headerValue(row, [
+          "Loại Khách",
+          "Loại khách",
+          "Loại KH",
+          "Loại"
+        ]),
+
+        symbol: headerValue(row, [
+          "Ký Hiệu",
+          "Ký hiệu",
+          "Nguồn",
+          "Kênh"
+        ]),
+
+        explanation: headerValue(row, [
+          "Giải Thích",
+          "Giải thích",
+          "Ghi chú",
+          "Mô tả"
+        ])
+      })).filter(c => c.name);
+
+      if (!imported.length) {
+        toast(
+          "Không thấy khách hàng hợp lệ. Kiểm tra tiêu đề cột Khách Hàng, Ngày Chốt và Hạn Chốt."
+        );
+        return;
+      }
+
+      const dateCount = imported.filter(c =>
+        c.closeDate || c.deadline
+      ).length;
+
+      const replace = confirm(
+        `Đọc được ${imported.length} khách hàng, trong đó ${dateCount} dòng có Ngày Chốt hoặc Hạn Chốt.\n\n` +
+        "OK: Thay thế dữ liệu hiện tại.\n" +
+        "Cancel: Gộp dữ liệu vào danh sách."
+      );
+
+      if (replace) {
+        customers = imported;
+      } else {
+        const map = new Map(
+          customers.map(c => [c.name.toLowerCase(), c])
+        );
+
+        for (const c of imported) {
+          const key = c.name.toLowerCase();
+          const old = map.get(key);
+
+          if (old) {
+            Object.assign(old, c, {
+              id: old.id,
+              updatedAt: new Date().toISOString()
+            });
+          } else {
+            customers.push(c);
+            map.set(key, c);
+          }
+        }
+      }
+
+      save();
+      render();
+      page("customers");
+
+      toast(
+        `Đã nhập ${imported.length} khách hàng. Ngày chốt/hạn chốt đã được đưa vào bảng Tất cả khách hàng.`
+      );
+    } catch (error) {
+      console.error(error);
+
+      toast(
+        "Không đọc được file Excel/CSV: " +
+        (error.message || "Kiểm tra định dạng file.")
+      );
+    } finally {
+      $("importFile").value = "";
+    }
+  };
+
+  reader.onerror = () => {
+    toast("Không thể đọc file.");
+    $("importFile").value = "";
+  };
+
+  reader.readAsArrayBuffer(file);
+}
+
+/* SAO LƯU VÀ KHÔI PHỤC JSON */
+
+function backup() {
+  download(
+    new Blob([
+      JSON.stringify({
+        app: "Cho Sale Gia Nghia CRM",
+        version: "3.5",
+        exportedAt: new Date().toISOString(),
+        customers
+      }, null, 2)
+    ], {
+      type: "application/json;charset=utf-8"
+    }),
+    `CRM_Backup_${todayISO()}.json`
+  );
+
+  toast("Đã sao lưu JSON.");
+}
+
+function restore(file) {
+  const reader = new FileReader();
+
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      const list = Array.isArray(data) ? data : data.customers;
+
+      if (!Array.isArray(list)) {
+        throw Error("JSON không hợp lệ");
+      }
+
+      if (!confirm(
+        `Khôi phục ${list.length} khách hàng và thay thế dữ liệu hiện tại?`
+      )) {
+        return;
+      }
+
+      customers = list.map(normalizeCustomer);
+
+      save();
+      render();
+
+      toast("Đã khôi phục dữ liệu.");
+    } catch (error) {
+      toast("File JSON không hợp lệ.");
+    } finally {
+      $("restoreFile").value = "";
+    }
+  };
+
+  reader.onerror = () => toast("Không đọc được file JSON.");
+
+  reader.readAsText(file, "utf-8");
+}
+
+function bindFiles() {
+  $("uploadExcelBtn").onclick = () => $("importFile").click();
+
+  $("importFile").addEventListener("change", event => {
+    const file = event.target.files?.[0];
+
+    if (!file) return;
+
+    if (!/\.(xlsx|xls|csv)$/i.test(file.name)) {
+      toast("Chọn file .xlsx, .xls hoặc .csv.");
+      event.target.value = "";
+      return;
+    }
+
+    importExcel(file);
+  });
+
+  $("exportExcelBtn").onclick = exportExcel;
+  $("exportCsvBtn").onclick = exportCSV;
+  $("backupBtn").onclick = backup;
+
+  $("restoreBtn").onclick = () => $("restoreFile").click();
+
+  $("restoreFile").addEventListener("change", event => {
+    if (event.target.files?.[0]) {
+      restore(event.target.files[0]);
+    }
+  });
+}
+
+/* ĐỔI SỐ TIỀN THÀNH CHỮ */
+
+const ones = [
+  "không", "một", "hai", "ba", "bốn",
+  "năm", "sáu", "bảy", "tám", "chín"
+];
+
+function readTriple(n, full) {
+  const h = Math.floor(n / 100);
+  const t = Math.floor((n % 100) / 10);
+  const u = n % 10;
+
+  let out = "";
+
+  if (h) {
+    out += ones[h] + " trăm";
+  } else if (full && (t || u)) {
+    out += "không trăm";
+  }
+
+  if (t > 1) {
+    out += (out ? " " : "") + ones[t] + " mươi";
+
+    if (u === 1) out += " mốt";
+    else if (u === 4) out += " tư";
+    else if (u === 5) out += " lăm";
+    else if (u) out += " " + ones[u];
+  } else if (t === 1) {
+    out += (out ? " " : "") + "mười";
+
+    if (u === 5) out += " lăm";
+    else if (u) out += " " + ones[u];
+  } else if (u) {
+    if (h || full) {
+      out += (out ? " " : "") + "lẻ " + ones[u];
+    } else {
+      out += ones[u];
+    }
+  }
+
+  return out.trim();
+}
+
+function amountWords(value) {
+  let n = Math.floor(Math.max(0, Number(value) || 0));
+
+  if (!n) return "Không đồng";
+
+  const scales = [
+    "",
+    " nghìn",
+    " triệu",
+    " tỷ",
+    " nghìn tỷ",
+    " triệu tỷ"
+  ];
+
+  const groups = [];
+
+  while (n > 0) {
+    groups.push(n % 1000);
+    n = Math.floor(n / 1000);
+  }
+
+  const parts = [];
+
+  for (let i = groups.length - 1; i >= 0; i--) {
+    if (!groups[i]) continue;
+
+    parts.push(
+      readTriple(
+        groups[i],
+        parts.length > 0 && groups[i] < 100
+      ) + (scales[i] || "")
+    );
+  }
+
+  let result = parts.join(" ").replace(/\s+/g, " ").trim();
+
+  return result.charAt(0).toUpperCase() + result.slice(1) + " đồng";
+}
+
+/* TẠO BIÊN LAI VÀ IN / LƯU PDF */
+
+function printReceipt(c) {
+  const no =
+    "BL-" +
+    todayISO().replace(/-/g, "") +
+    "-" +
+    c.id.replace(/\W/g, "").slice(-6).toUpperCase();
+
+  const amount = Number(c.revenue) || 0;
+
+  const w = window.open("", "_blank", "width=900,height=1000");
+
+  if (!w) {
+    toast("Trình duyệt chặn cửa sổ biên lai. Cho phép pop-up rồi thử lại.");
+    return;
+  }
+
+  const html = `<!doctype html>
 <html lang="vi">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Biên lai ${escapeHTML(receiptNumber)}</title>
-
+<title>Biên lai ${esc(no)}</title>
 <style>
-* { box-sizing: border-box; }
-
-body {
-  margin: 0;
-  padding: 28px;
-  color: #172033;
-  background: #f0f2f5;
-  font-family: Arial, Helvetica, sans-serif;
+*{box-sizing:border-box}
+body{margin:0;padding:22px;background:#eef2f6;color:#243447;font:13px/1.55 Arial,sans-serif}
+.tools{display:flex;justify-content:center;gap:10px;margin:0 auto 18px}
+.tools button{padding:10px 16px;border:0;border-radius:7px;background:#146c94;color:#fff;font-weight:bold;cursor:pointer}
+.tools .secondary{background:#fff;color:#102f43;border:1px solid #dce5ec}
+.receipt{max-width:800px;min-height:950px;margin:auto;padding:42px 48px;background:white;box-shadow:0 10px 35px #102f4315}
+.stripe{height:5px;margin:-42px -48px 30px;background:linear-gradient(90deg,#102f43,#146c94,#4db5dc)}
+header{display:flex;justify-content:space-between;gap:20px;border-bottom:2px solid #102f43;padding-bottom:22px}
+.brand{display:flex;gap:12px;align-items:center}
+.logo{width:52px;height:52px;display:grid;place-items:center;background:#102f43;color:#fff;border-radius:12px;font-size:19px;font-weight:bold}
+.brand h2{margin:0;color:#102f43;font-size:20px}
+.brand p{margin:4px 0 0;color:#64748b;font-size:10px;letter-spacing:1px}
+.meta{text-align:right;font-size:11px}
+.meta b{display:block;color:#146c94;font-size:13px;margin-bottom:6px}
+.title{text-align:center;margin:30px 0 4px;font-size:26px;letter-spacing:1px;color:#102f43}
+.subtitle{text-align:center;color:#64748b;font-size:11px;margin-bottom:25px}
+.sect{margin:22px 0 10px;font-weight:bold;font-size:12px;color:#102f43;letter-spacing:.5px}
+.customer{display:grid;grid-template-columns:1fr 1fr;gap:13px 22px;padding:17px;border:1px solid #dce5ec;border-radius:9px;background:#fbfdfe}
+.label{display:block;color:#64748b;font-size:10px;text-transform:uppercase}
+.value{font-weight:bold;overflow-wrap:anywhere}
+table{width:100%;border-collapse:collapse;margin-top:10px}
+th{background:#102f43;color:white;text-align:left;padding:11px;font-size:11px}
+td{padding:14px 10px;border-bottom:1px solid #dce5ec;vertical-align:top}
+td:last-child,th:last-child{text-align:right}
+.amount{margin-top:18px;padding:18px 20px;border:1px solid #d3e8f2;border-radius:9px;background:#eaf4f9}
+.amount .label{font-weight:bold;letter-spacing:.5px}
+.big{font-size:26px;font-weight:900;color:#102f43;margin:6px 0 12px;overflow-wrap:anywhere}
+.words{padding-top:10px;border-top:1px dashed #b8d4e2;font-style:italic}
+.note{margin-top:20px;padding:12px 14px;border-left:3px solid #146c94;background:#f7fafc;color:#536779;font-size:10px}
+.signs{display:grid;grid-template-columns:1fr 1fr;gap:25px;text-align:center;margin-top:40px}
+.signs b{display:block;color:#102f43}
+.signs small{color:#64748b;font-style:italic}
+.space{height:90px}
+.foot{text-align:center;border-top:1px solid #dce5ec;padding-top:12px;margin-top:22px;color:#64748b;font-size:10px}
+@page{size:A4;margin:12mm}
+@media print{
+ body{padding:0;background:white;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+ .tools{display:none}
+ .receipt{max-width:none;min-height:0;padding:12mm;box-shadow:none}
+ .stripe{margin:-12mm -12mm 9mm}
+ .customer,.amount,.table,.signs{break-inside:avoid}
 }
-
-.receipt {
-  width: 100%;
-  max-width: 760px;
-  margin: 0 auto;
-  padding: 42px;
-  background: white;
-  border: 1px solid #d9dee7;
-}
-
-.header {
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-  padding-bottom: 22px;
-  border-bottom: 2px solid #146c94;
-}
-
-.brand {
-  color: #146c94;
-  font-size: 23px;
-  font-weight: 900;
-}
-
-.muted {
-  color: #667085;
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.receipt-no {
-  text-align: right;
-  font-size: 12px;
-  line-height: 1.8;
-}
-
-h1 {
-  margin: 28px 0 8px;
-  text-align: center;
-  font-size: 27px;
-  letter-spacing: 2px;
-}
-
-.subtitle {
-  text-align: center;
-  color: #667085;
-  font-size: 12px;
-}
-
-.info { margin-top: 28px; }
-
-.info-row {
-  display: grid;
-  grid-template-columns: 175px 1fr;
-  gap: 14px;
-  padding: 11px 0;
-  border-bottom: 1px dashed #d9dee7;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.info-row span:first-child { color: #667085; }
-.info-row strong { overflow-wrap: anywhere; }
-
-.amount-box {
-  margin-top: 24px;
-  padding: 20px;
-  border: 1px solid #b8dce9;
-  border-radius: 10px;
-  background: #f2f9fc;
-}
-
-.amount-box span {
-  display: block;
-  color: #475467;
-  font-size: 12px;
-}
-
-.amount {
-  margin: 8px 0;
-  color: #146c94;
-  font-size: 28px;
-  font-weight: 900;
-}
-
-.amount-words {
-  font-size: 12px;
-  font-style: italic;
-  line-height: 1.6;
-}
-
-.note {
-  margin-top: 20px;
-  padding: 12px;
-  border-left: 3px solid #d87a2c;
-  background: #fff8ef;
-  color: #69410d;
-  font-size: 11px;
-  line-height: 1.6;
-}
-
-.signatures {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 35px;
-  margin-top: 48px;
-  text-align: center;
-}
-
-.signatures strong {
-  display: block;
-  font-size: 12px;
-}
-
-.signatures span {
-  display: block;
-  margin-top: 6px;
-  color: #667085;
-  font-size: 11px;
-  font-style: italic;
-}
-
-.sign-space { height: 90px; }
-
-.footer {
-  margin-top: 30px;
-  padding-top: 12px;
-  border-top: 1px solid #e1e7ef;
-  color: #667085;
-  text-align: center;
-  font-size: 10px;
-  line-height: 1.6;
-}
-
-.toolbar {
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  margin: 0 auto 20px;
-}
-
-.toolbar button {
-  padding: 11px 18px;
-  border: 0;
-  border-radius: 7px;
-  background: #146c94;
-  color: white;
-  font-weight: bold;
-  cursor: pointer;
-}
-
-.toolbar .close { background: #667085; }
-
-@media print {
-  body {
-    padding: 0;
-    background: white;
-  }
-
-  .receipt {
-    max-width: none;
-    padding: 15mm;
-    border: 0;
-  }
-
-  .toolbar { display: none; }
-
-  @page {
-    size: A4;
-    margin: 10mm;
-  }
-}
-
-@media (max-width: 600px) {
-  body { padding: 10px; }
-  .receipt { padding: 20px; }
-  .header { flex-direction: column; }
-  .receipt-no { text-align: left; }
-  .info-row { grid-template-columns: 1fr; gap: 4px; }
+@media(max-width:600px){
+ body{padding:8px}
+ .receipt{padding:20px;min-height:0}
+ .stripe{margin:-20px -20px 20px}
+ header{flex-direction:column}
+ .meta{text-align:left}
+ .customer{grid-template-columns:1fr}
+ .title{font-size:22px}
 }
 </style>
 </head>
-
 <body>
-
-<div class="toolbar">
+<div class="tools">
   <button onclick="window.print()">In / Lưu PDF</button>
-  <button class="close" onclick="window.close()">Đóng</button>
+  <button class="secondary" onclick="window.close()">Đóng</button>
 </div>
 
 <main class="receipt">
+  <div class="stripe"></div>
 
-  <header class="header">
-    <div>
-      <div class="brand">CHỢ SALE GIA NGHĨA</div>
-      <p class="muted">
-        Hệ thống quản lý khách hàng<br>
-        Biên lai nội bộ
-      </p>
+  <header>
+    <div class="brand">
+      <div class="logo">CS</div>
+      <div>
+        <h2>CHỢ SALE GIA NGHĨA</h2>
+        <p>HỆ THỐNG QUẢN LÝ KHÁCH HÀNG</p>
+      </div>
     </div>
 
-    <div class="receipt-no">
-      <strong>Mã biên lai</strong><br>
-      ${escapeHTML(receiptNumber)}<br>
-      <span class="muted">Ngày lập: ${escapeHTML(dateText())}</span>
+    <div class="meta">
+      <b>BIÊN LAI NỘI BỘ</b>
+      <div>Mã chứng từ: ${esc(no)}</div>
+      <div>Ngày lập: ${dateText(todayISO())}</div>
     </div>
   </header>
 
-  <h1>BIÊN LAI</h1>
-  <div class="subtitle">Xác nhận thông tin giao dịch nội bộ</div>
+  <h1 class="title">BIÊN LAI THANH TOÁN</h1>
+  <div class="subtitle">Chứng từ ghi nhận thông tin giao dịch nội bộ</div>
 
-  <section class="info">
+  <div class="sect">01 / THÔNG TIN KHÁCH HÀNG</div>
 
-    <div class="info-row">
-      <span>Khách hàng</span>
-      <strong>${escapeHTML(customer.name)}</strong>
+  <div class="customer">
+    <div>
+      <span class="label">Khách hàng</span>
+      <span class="value">${esc(c.name)}</span>
     </div>
 
-    <div class="info-row">
-      <span>Mã khách hàng / STT</span>
-      <strong>${escapeHTML(customer.stt || "—")}</strong>
+    <div>
+      <span class="label">Mã khách hàng</span>
+      <span class="value">${esc(c.id)}</span>
     </div>
 
-    <div class="info-row">
-      <span>Loại khách</span>
-      <strong>${escapeHTML(customer.customerType || "—")}</strong>
+    <div>
+      <span class="label">Ngày chốt</span>
+      <span class="value">${dateText(c.closeDate)}</span>
     </div>
 
-    <div class="info-row">
-      <span>Ký hiệu</span>
-      <strong>${escapeHTML(customer.symbol || "—")}</strong>
+    <div>
+      <span class="label">Tiến trình</span>
+      <span class="value">${esc(c.progress)}</span>
     </div>
 
-    <div class="info-row">
-      <span>Ngày chốt</span>
-      <strong>${escapeHTML(formatDateOnly(customer.closeDate) || "—")}</strong>
+    <div>
+      <span class="label">Loại khách</span>
+      <span class="value">${esc(c.type)}</span>
     </div>
 
-    <div class="info-row">
-      <span>Tiến trình</span>
-      <strong>${escapeHTML(formatProgress(customer.progress) || "—")}</strong>
+    <div>
+      <span class="label">Kênh / Ký hiệu</span>
+      <span class="value">${esc(c.symbol)}</span>
     </div>
-
-    <div class="info-row">
-      <span>Hạn chốt</span>
-      <strong>${escapeHTML(formatDateOnly(customer.deadline) || "Không hạn")}</strong>
-    </div>
-
-    <div class="info-row">
-      <span>Nội dung / giải thích</span>
-      <strong>${escapeHTML(customer.explanation || "Không có ghi chú")}</strong>
-    </div>
-
-  </section>
-
-  <section class="amount-box">
-    <span>Tổng số tiền</span>
-    <div class="amount">${formatMoney(amount)}</div>
-    <div class="amount-words">
-      Bằng chữ: ${escapeHTML(numberToVietnameseWords(amount))}.
-    </div>
-  </section>
-
-  <div class="note">
-    <strong>Lưu ý:</strong>
-    Đây là mẫu biên lai nội bộ được tạo từ dữ liệu CRM.
-    Biên lai không thay thế hóa đơn điện tử hoặc chứng từ thuế.
-    Chỉ xác nhận thanh toán khi giao dịch thực tế đã được kiểm tra.
   </div>
 
-  <section class="signatures">
+  <div class="sect">02 / CHI TIẾT GIAO DỊCH</div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>STT</th>
+        <th>Nội dung</th>
+        <th>Số lượng</th>
+        <th>Thành tiền</th>
+      </tr>
+    </thead>
+
+    <tbody>
+      <tr>
+        <td>01</td>
+        <td>
+          <b>Giá trị giao dịch / doanh số</b><br>
+          <span style="color:#64748b">
+            ${esc(c.explanation || "Theo thông tin ghi nhận trong CRM")}
+          </span>
+        </td>
+        <td>1</td>
+        <td><b>${money(amount)}</b></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="amount">
+    <span class="label">TỔNG GIÁ TRỊ CHỨNG TỪ</span>
+    <div class="big">${money(amount)}</div>
+    <div class="words">
+      <b>Bằng chữ:</b> ${esc(amountWords(amount))}.
+    </div>
+  </div>
+
+  <div class="note">
+    <b>Lưu ý:</b> Biên lai này được tạo từ dữ liệu quản lý nội bộ.
+    Cần kiểm tra và xác nhận giao dịch trước khi sử dụng.
+    Không thay thế hóa đơn điện tử hoặc chứng từ thuế theo quy định.
+  </div>
+
+  <div class="signs">
     <div>
-      <strong>NGƯỜI NỘP TIỀN</strong>
-      <span>(Ký và ghi rõ họ tên)</span>
-      <div class="sign-space"></div>
+      <b>NGƯỜI NỘP TIỀN</b>
+      <small>(Ký và ghi rõ họ tên)</small>
+      <div class="space"></div>
     </div>
 
     <div>
-      <strong>NGƯỜI THU TIỀN</strong>
-      <span>(Ký và ghi rõ họ tên)</span>
-      <div class="sign-space"></div>
+      <b>NGƯỜI LẬP / THU TIỀN</b>
+      <small>(Ký và ghi rõ họ tên)</small>
+      <div class="space"></div>
     </div>
-  </section>
+  </div>
 
-  <footer class="footer">
-    Chợ Sale Gia Nghĩa · Biên lai được tạo từ hệ thống CRM<br>
-    Mã biên lai: ${escapeHTML(receiptNumber)}
-  </footer>
-
+  <div class="foot">
+    CHỢ SALE GIA NGHĨA · BIÊN LAI NỘI BỘ · ${esc(no)}
+  </div>
 </main>
 </body>
-</html>
-`;
+</html>`;
 
-  receiptWindow.document.open();
-  receiptWindow.document.write(receiptHTML);
-  receiptWindow.document.close();
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+
+  toast("Đã tạo biên lai. Chọn In / Lưu PDF.");
 }
 
-/* =========================================
-   15. GẮN SỰ KIỆN
-========================================= */
+/* KHỞI ĐỘNG */
 
-function bindEvents() {
-  el.syncBtn.addEventListener("click", syncFromExcelFile);
-  el.excelFile.addEventListener("change", syncFromExcelFile);
+function init() {
+  load();
+  bindForm();
+  bindTable();
+  bindFiles();
+  bindExcelDateReader();
+  render();
+}
 
-  el.exportBtn.addEventListener("click", exportCsv);
-  el.exportExcelBtn.addEventListener("click", exportExcel);
+document.addEventListener("DOMContentLoaded", init);
 
-  el.addCustomerBtn.addEventListener("click", () => {
-    openCustomerForm();
-  });
+/* ĐỌC RIÊNG CỘT NGÀY CHỐT VÀ HẠN CHỐT TỪ EXCEL/CSV */
 
-  el.closeDialogBtn.addEventListener("click", closeDialog);
-  el.cancelDialogBtn.addEventListener("click", closeDialog);
+function normalizeExcelHeader(value) {
+  return String(value ?? "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[đĐ]/g, "d")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
 
-  el.form.addEventListener("submit", saveCustomer);
-  el.rows.addEventListener("click", handleRowAction);
+function findExcelColumn(headers, aliases) {
+  const names = aliases.map(normalizeExcelHeader);
 
-  el.search.addEventListener("input", event => {
-    state.query = normalizeSearch(event.target.value);
-    renderRows();
-    renderSummary();
-  });
+  return headers.findIndex(value =>
+    names.includes(normalizeExcelHeader(value))
+  );
+}
 
-  el.typeFilter.addEventListener("change", event => {
-    state.type = event.target.value;
-    renderRows();
-    renderSummary();
-  });
+function excelDateDisplay(value) {
+  if (value === 0 || String(value).trim() === "0") {
+    return "0";
+  }
 
-  el.symbolFilter.addEventListener("change", event => {
-    state.symbol = event.target.value;
-    renderRows();
-    renderSummary();
-  });
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return `${String(value.getDate()).padStart(2, "0")}/${String(value.getMonth() + 1).padStart(2, "0")}/${value.getFullYear()}`;
+  }
 
-  el.deadlineFilter.addEventListener("change", event => {
-    state.deadline = event.target.value;
-    syncQuickButtons();
-    renderRows();
-    renderSummary();
-  });
+  if (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    typeof XLSX !== "undefined"
+  ) {
+    const parts = XLSX.SSF.parse_date_code(value);
 
-  el.clearFilter.addEventListener("click", () => {
-    state.query = "";
-    state.type = "";
-    state.symbol = "";
-    state.deadline = "";
+    if (parts && parts.y && parts.m && parts.d) {
+      return `${String(parts.d).padStart(2, "0")}/${String(parts.m).padStart(2, "0")}/${parts.y}`;
+    }
 
-    el.search.value = "";
-    el.typeFilter.value = "";
-    el.symbolFilter.value = "";
-    el.deadlineFilter.value = "";
+    return String(value);
+  }
 
-    render();
-  });
+  const text = String(value).trim();
 
-  document.querySelectorAll(".quick-btn").forEach(button => {
-    button.addEventListener("click", () => {
-      state.deadline = button.dataset.deadline || "";
-      el.deadlineFilter.value = state.deadline;
+  if (!text) return "—";
 
-      syncQuickButtons();
-      renderRows();
-      renderSummary();
+  let match = text.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);
+
+  if (match) {
+    return `${match[1].padStart(2, "0")}/${match[2].padStart(2, "0")}/${match[3]}`;
+  }
+
+  match = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+
+  if (match) {
+    return `${match[3].padStart(2, "0")}/${match[2].padStart(2, "0")}/${match[1]}`;
+  }
+
+  // Giữ nguyên dạng ngày như 31/5 nếu file không ghi năm.
+  return text;
+}
+
+function setExcelDateMessage(text, type = "") {
+  const el = $("dateExcelMessage");
+
+  if (!el) return;
+
+  el.textContent = text;
+
+  el.classList.toggle("excel-date-message-error", type === "error");
+  el.classList.toggle("excel-date-message-success", type === "success");
+}
+
+function renderExcelDateRows(rows) {
+  const body = $("dateExcelTableBody");
+
+  body.replaceChildren();
+
+  if (!rows.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+
+    td.colSpan = 4;
+    td.className = "muted";
+    td.textContent = "Không có dòng dữ liệu phù hợp.";
+
+    tr.appendChild(td);
+    body.appendChild(tr);
+
+    return;
+  }
+
+  rows.forEach((item, index) => {
+    const tr = document.createElement("tr");
+
+    [
+      String(index + 1),
+      item.customer || "—",
+      excelDateDisplay(item.closeDate),
+      excelDateDisplay(item.deadline)
+    ].forEach(value => {
+      const td = document.createElement("td");
+      td.textContent = value;
+      tr.appendChild(td);
     });
+
+    body.appendChild(tr);
   });
 }
 
-/* =========================================
-   16. KHỞI ĐỘNG ỨNG DỤNG
-========================================= */
+function readDateColumnsFromExcel(file) {
+  if (typeof XLSX === "undefined") {
+    setExcelDateMessage(
+      "Không tải được thư viện Excel. Kiểm tra kết nối mạng rồi tải lại trang.",
+      "error"
+    );
+    return;
+  }
 
-restoreData();
-bindEvents();
-render();
+  const reader = new FileReader();
+
+  reader.onload = event => {
+    try {
+      const workbook = XLSX.read(event.target.result, {
+        type: "array",
+        cellDates: true
+      });
+
+      if (!workbook.SheetNames.length) {
+        throw new Error("File không có trang tính.");
+      }
+
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+
+      const rows = XLSX.utils.sheet_to_json(sheet, {
+        header: 1,
+        defval: "",
+        raw: false,
+        blankrows: false
+      });
+
+      if (!rows.length) {
+        throw new Error("File không có dữ liệu.");
+      }
+
+      let headerRow = -1;
+      let closeIndex = -1;
+      let deadlineIndex = -1;
+      let nameIndex = -1;
+
+      for (let i = 0; i < Math.min(rows.length, 30); i++) {
+        const candidate = rows[i] || [];
+
+        const close = findExcelColumn(candidate, [
+          "Ngày Chốt",
+          "Ngay chot",
+          "Ngày chốt khách hàng",
+          "Ngày"
+        ]);
+
+        const deadline = findExcelColumn(candidate, [
+          "Hạn Chốt",
+          "Han chot",
+          "Hạn chốt khách hàng",
+          "Deadline",
+          "Hạn"
+        ]);
+
+        if (close !== -1 && deadline !== -1) {
+          headerRow = i;
+          closeIndex = close;
+          deadlineIndex = deadline;
+
+          nameIndex = findExcelColumn(candidate, [
+            "Khách Hàng",
+            "Khách hàng",
+            "Tên khách hàng",
+            "Tên"
+          ]);
+
+          break;
+        }
+      }
+
+      if (headerRow === -1) {
+        throw new Error(
+          "Không tìm thấy đủ hai cột “Ngày Chốt” và “Hạn Chốt” trong 30 dòng đầu."
+        );
+      }
+
+      const result = [];
+
+      rows.slice(headerRow + 1).forEach(row => {
+        const customer = nameIndex !== -1
+          ? String(row[nameIndex] ?? "").trim()
+          : "";
+
+        const closeDate = row[closeIndex] ?? "";
+        const deadline = row[deadlineIndex] ?? "";
+
+        if (
+          !customer &&
+          !String(closeDate).trim() &&
+          !String(deadline).trim()
+        ) {
+          return;
+        }
+
+        result.push({
+          customer,
+          closeDate,
+          deadline
+        });
+      });
+
+      renderExcelDateRows(result);
+
+      setExcelDateMessage(
+        `Đã đọc ${result.length} dòng từ "${file.name}" (sheet: ${workbook.SheetNames[0]}).`,
+        "success"
+      );
+    } catch (error) {
+      console.error("Lỗi đọc cột ngày từ Excel:", error);
+
+      renderExcelDateRows([]);
+
+      setExcelDateMessage(
+        error.message || "Không thể đọc file Excel/CSV.",
+        "error"
+      );
+    }
+  };
+
+  reader.onerror = () => {
+    setExcelDateMessage("Không thể đọc file được chọn.", "error");
+  };
+
+  reader.readAsArrayBuffer(file);
+}
+
+function bindExcelDateReader() {
+  const input = $("dateExcelFile");
+  const button = $("readDateExcelBtn");
+  const clear = $("clearDateExcelBtn");
+
+  if (!input || !button || !clear) return;
+
+  button.addEventListener("click", () => {
+    const file = input.files && input.files[0];
+
+    if (!file) {
+      setExcelDateMessage(
+        "Vui lòng chọn file Excel hoặc CSV trước.",
+        "error"
+      );
+      return;
+    }
+
+    if (!/\.(xlsx|xls|csv)$/i.test(file.name)) {
+      setExcelDateMessage(
+        "Chỉ hỗ trợ file .xlsx, .xls hoặc .csv.",
+        "error"
+      );
+      return;
+    }
+
+    readDateColumnsFromExcel(file);
+  });
+
+  clear.addEventListener("click", () => {
+    input.value = "";
+
+    renderExcelDateRows([]);
+
+    setExcelDateMessage(
+      "Đã xóa bảng tra cứu. Dữ liệu CRM không bị thay đổi."
+    );
+  });
+}
