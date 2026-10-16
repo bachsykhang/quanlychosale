@@ -792,7 +792,7 @@ function importExcel(file) {
     try {
       const wb = XLSX.read(event.target.result, {
         type: "array",
-        cellDates: true
+        cellDates: false
       });
 
       const sheet = wb.Sheets[wb.SheetNames[0]];
@@ -1477,7 +1477,7 @@ function readDateColumnsFromExcel(file) {
     try {
       const workbook = XLSX.read(event.target.result, {
         type: "array",
-        cellDates: true
+        cellDates: false
       });
 
       if (!workbook.SheetNames.length) {
