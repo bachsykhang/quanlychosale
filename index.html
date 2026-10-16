@@ -5,20 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   <title>CRM Khách Hàng</title>
-
   <link rel="stylesheet" href="styles.css">
 </head>
 
 <body>
-
 <div class="app-shell">
 
-  <!-- SIDEBAR -->
+  <!-- THANH BÊN -->
   <aside class="sidebar">
-
     <div class="brand">
       <span class="brand-mark">CRM</span>
-
       <div>
         <strong>Quản lý khách hàng</strong>
         <span>Đồng bộ với Excel</span>
@@ -33,24 +29,18 @@
     </nav>
 
     <div class="sidebar-stats">
-
       <div class="side-stat">
         <span>Tổng khách</span>
         <strong id="sideTotal">0</strong>
       </div>
-
       <div class="side-stat">
         <span>Khẩn cấp</span>
         <strong id="sideUrgent">0</strong>
       </div>
-
     </div>
 
     <div class="sheet-box" id="import">
-
-      <label for="excelFile">
-        File Excel khách hàng
-      </label>
+      <label for="excelFile">File Excel khách hàng</label>
 
       <input
         id="excelFile"
@@ -70,425 +60,230 @@
       <p id="importStatus" class="muted">
         Chọn file Excel để bắt đầu.
       </p>
-
     </div>
-
   </aside>
 
-
-  <!-- MAIN -->
+  <!-- NỘI DUNG CHÍNH -->
   <main class="main">
 
-    <!-- TOPBAR -->
+    <!-- TIÊU ĐỀ -->
     <header class="topbar">
-
       <div>
-
-        <p class="eyebrow">
-          HỆ THỐNG CRM
-        </p>
+        <p class="eyebrow">HỆ THỐNG CRM</p>
 
         <h1>
           Quản lý dữ liệu khách hàng Chợ Sale Gia Nghĩa
         </h1>
 
         <p class="subtitle">
-          Theo dõi khách hàng, hạn chốt và doanh số - dev: Bạch Sỹ Khang
+          Theo dõi khách hàng, hạn chốt, doanh số và xuất biên lai
         </p>
-
       </div>
 
-
       <div class="actions">
-
-        <button
-          class="ghost"
-          id="exportBtn"
-          type="button"
-        >
+        <button class="ghost" id="exportBtn" type="button">
           Xuất CSV
         </button>
 
-        <button
-          class="ghost"
-          id="exportExcelBtn"
-          type="button"
-        >
+        <button class="ghost" id="exportExcelBtn" type="button">
           Tải Excel
         </button>
 
-        <button
-          class="primary"
-          id="addCustomerBtn"
-          type="button"
-        >
+        <button class="primary" id="addCustomerBtn" type="button">
           + Thêm khách
         </button>
-
       </div>
-
     </header>
 
-
-    <!-- METRICS -->
-    <section
-      class="metrics"
-      id="dashboard"
-    >
+    <!-- THỐNG KÊ -->
+    <section class="metrics" id="dashboard">
 
       <article class="metric-card">
-
-        <div class="metric-icon blue">
-          👥
-        </div>
-
+        <div class="metric-icon blue">👥</div>
         <div>
           <span>Tổng khách</span>
           <strong id="totalCustomers">0</strong>
         </div>
-
       </article>
 
-
       <article class="metric-card">
-
-        <div class="metric-icon green">
-          ✨
-        </div>
-
+        <div class="metric-icon green">✨</div>
         <div>
           <span>Khách mới</span>
           <strong id="newCustomers">0</strong>
         </div>
-
       </article>
 
-
       <article class="metric-card">
-
-        <div class="metric-icon orange">
-          💰
-        </div>
-
+        <div class="metric-icon orange">💰</div>
         <div>
           <span>Tổng doanh số</span>
           <strong id="expectedRevenue">0đ</strong>
         </div>
-
       </article>
 
-
       <article class="metric-card danger-card">
-
-        <div class="metric-icon red">
-          ⚠
-        </div>
-
+        <div class="metric-icon red">⚠</div>
         <div>
           <span>Cần chú ý</span>
           <strong id="needFollowUp">0</strong>
         </div>
-
       </article>
 
     </section>
 
-
-    <!-- QUICK FILTER -->
+    <!-- LỌC NHANH -->
     <section class="quick-filter">
-
       <div>
         <strong>Lọc nhanh</strong>
         <span>Lọc khách hàng theo tình trạng hạn chốt</span>
       </div>
 
       <div class="quick-buttons">
-
-        <button
-          class="quick-btn active"
-          data-deadline=""
-        >
+        <button class="quick-btn active" data-deadline="">
           Tất cả
         </button>
 
-        <button
-          class="quick-btn"
-          data-deadline="zero"
-        >
+        <button class="quick-btn" data-deadline="zero">
           Không hạn
         </button>
 
-        <button
-          class="quick-btn"
-          data-deadline="normal"
-        >
+        <button class="quick-btn" data-deadline="normal">
           Có hạn
         </button>
 
-        <button
-          class="quick-btn"
-          data-deadline="urgent"
-        >
+        <button class="quick-btn" data-deadline="urgent">
           Khẩn cấp
         </button>
 
-        <button
-          class="quick-btn"
-          data-deadline="overdue"
-        >
+        <button class="quick-btn" data-deadline="overdue">
           Quá hạn
         </button>
-
       </div>
-
     </section>
 
+    <!-- DANH SÁCH KHÁCH HÀNG -->
+    <section class="workspace" id="customers">
 
-    <!-- CUSTOMER TABLE -->
-    <section
-      class="workspace"
-      id="customers"
-    >
-
-      <!-- TOOLBAR -->
       <div class="toolbar">
-
         <div class="search-field">
-
           <span>⌕</span>
-
           <input
             id="searchInput"
             type="search"
             placeholder="Tìm tên, loại khách, ký hiệu, giải thích..."
           >
-
         </div>
 
-
         <select id="typeFilter">
-          <option value="">
-            Tất cả loại khách
-          </option>
+          <option value="">Tất cả loại khách</option>
         </select>
-
 
         <select id="symbolFilter">
-          <option value="">
-            Tất cả ký hiệu
-          </option>
+          <option value="">Tất cả ký hiệu</option>
         </select>
 
-
-        <!-- BỘ LỌC HẠN CHỐT -->
         <select id="deadlineFilter">
-
-          <option value="">
-            Tất cả hạn chốt
-          </option>
-
-          <option value="zero">
-            Không hạn
-          </option>
-
-          <option value="normal">
-            Có hạn
-          </option>
-
-          <option value="urgent">
-            Khẩn cấp
-          </option>
-
-          <option value="overdue">
-            Quá hạn
-          </option>
-
+          <option value="">Tất cả hạn chốt</option>
+          <option value="zero">Không hạn</option>
+          <option value="normal">Có hạn</option>
+          <option value="urgent">Khẩn cấp</option>
+          <option value="overdue">Quá hạn</option>
         </select>
 
-
-        <button
-          class="ghost"
-          id="clearFilterBtn"
-          type="button"
-        >
+        <button class="ghost" id="clearFilterBtn" type="button">
           Đặt lại
         </button>
-
       </div>
 
-
-      <!-- SUMMARY -->
+      <!-- THÔNG TIN DANH SÁCH -->
       <div class="list-summary">
-
         <div>
-          <strong id="resultCount">
-            0 khách hàng
-          </strong>
-
-          <span
-            class="filter-indicator"
-            id="filterIndicator"
-          >
+          <strong id="resultCount">0 khách hàng</strong>
+          <span class="filter-indicator" id="filterIndicator">
             Đang hiển thị tất cả
           </span>
         </div>
 
-        <span id="fileInfo">
-          Chưa đồng bộ Excel.
-        </span>
-
+        <span id="fileInfo">Chưa đồng bộ Excel.</span>
       </div>
 
-
-      <!-- TABLE -->
+      <!-- BẢNG KHÁCH HÀNG -->
       <div class="table-wrap">
-
         <table>
-
           <thead>
-
             <tr>
-
               <th>STT</th>
-
               <th>Khách hàng</th>
-
               <th>Ngày chốt</th>
-
               <th>Tiến trình</th>
-
               <th>Hạn chốt</th>
-
               <th>Doanh số</th>
-
               <th>Loại khách</th>
-
               <th>Ký hiệu</th>
-
               <th>Giải thích</th>
-
               <th>Thao tác</th>
-
             </tr>
-
           </thead>
 
-
           <tbody id="customerRows"></tbody>
-
         </table>
 
-
-        <div
-          class="empty-state"
-          id="emptyState"
-        >
-
-          <div class="empty-icon">
-            📂
-          </div>
-
-          <strong>
-            Không tìm thấy khách hàng
-          </strong>
-
+        <div class="empty-state" id="emptyState">
+          <div class="empty-icon">📂</div>
+          <strong>Không tìm thấy khách hàng</strong>
           <span>
             Hãy thay đổi bộ lọc hoặc thêm dữ liệu mới.
           </span>
-
         </div>
-
       </div>
-
     </section>
 
-
-    <!-- PIPELINE -->
-    <section
-      class="pipeline"
-      id="pipeline"
-    >
-
+    <!-- THỐNG KÊ LOẠI KHÁCH -->
+    <section class="pipeline" id="pipeline">
       <div class="section-head">
-
         <div>
-
-          <h2>
-            Phân bổ loại khách
-          </h2>
-
-          <span>
-            Thống kê dữ liệu hiện tại
-          </span>
-
+          <h2>Phân bổ loại khách</h2>
+          <span>Thống kê dữ liệu hiện tại</span>
         </div>
 
-        <span id="lastUpdated">
-          Chưa cập nhật
-        </span>
-
+        <span id="lastUpdated">Chưa cập nhật</span>
       </div>
 
-
-      <div
-        class="pipeline-grid"
-        id="pipelineGrid"
-      ></div>
-
+      <div class="pipeline-grid" id="pipelineGrid"></div>
     </section>
 
   </main>
-
 </div>
 
-
-<!-- MODAL -->
+<!-- HỘP THÊM / SỬA KHÁCH HÀNG -->
 <dialog id="customerDialog">
-
   <form id="customerForm">
 
     <div class="dialog-head">
-
       <div>
-
-        <span class="eyebrow">
-          CRM
-        </span>
-
-        <h2 id="dialogTitle">
-          Thêm dữ liệu
-        </h2>
-
+        <span class="eyebrow">CRM</span>
+        <h2 id="dialogTitle">Thêm dữ liệu</h2>
       </div>
 
       <button
         class="icon-btn"
         id="closeDialogBtn"
         type="button"
+        aria-label="Đóng"
       >
         ×
       </button>
-
     </div>
 
-
-    <input
-      id="customerId"
-      type="hidden"
-    >
-
+    <input id="customerId" type="hidden">
 
     <div class="form-grid">
 
       <label>
         STT
-        <input
-          id="sttInput"
-          type="number"
-          min="1"
-        >
+        <input id="sttInput" type="number" min="1">
       </label>
-
 
       <label>
         Khách hàng *
@@ -499,43 +294,29 @@
         >
       </label>
 
-
       <label>
         Ngày chốt
-        <input
-          id="closeDateInput"
-          placeholder="31/5"
-        >
+        <input id="closeDateInput" placeholder="31/5">
       </label>
-
 
       <label>
         Tiến trình
-        <input
-          id="progressInput"
-          placeholder="14/14"
-        >
+        <input id="progressInput" placeholder="14/14">
       </label>
-
 
       <label>
         Hạn chốt
-        <input
-          id="deadlineInput"
-          placeholder="0 hoặc 6/7"
-        >
+        <input id="deadlineInput" placeholder="0 hoặc 6/7">
       </label>
 
-
       <label>
-        Doanh số
+        Doanh số (VNĐ)
         <input
           id="valueInput"
           inputmode="numeric"
           placeholder="200.000"
         >
       </label>
-
 
       <label>
         Loại khách
@@ -545,7 +326,6 @@
         >
       </label>
 
-
       <label>
         Ký hiệu
         <input
@@ -554,47 +334,34 @@
         >
       </label>
 
-
       <label class="full">
         Giải thích
-
         <textarea
           id="explanationInput"
           rows="4"
           placeholder="Ghi chú về khách hàng..."
         ></textarea>
-
       </label>
 
     </div>
 
-
     <div class="dialog-actions">
-
-      <button
-        class="ghost"
-        id="cancelDialogBtn"
-        type="button"
-      >
+      <button class="ghost" id="cancelDialogBtn" type="button">
         Hủy
       </button>
 
-      <button
-        class="primary"
-        type="submit"
-      >
+      <button class="primary" type="submit">
         Lưu dữ liệu
       </button>
-
     </div>
 
   </form>
-
 </dialog>
 
-
+<!-- THƯ VIỆN ĐỌC / GHI FILE EXCEL -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
+<!-- LOGIC ỨNG DỤNG -->
 <script src="app.js"></script>
 
 </body>
